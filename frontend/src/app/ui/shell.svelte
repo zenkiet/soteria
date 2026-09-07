@@ -10,6 +10,7 @@
 		Quota,
 		SignOut,
 		transfers,
+		update,
 		type Entry,
 		type QuotaInfo,
 		type Server
@@ -133,6 +134,16 @@
 			</div>
 		{/if}
 		<div class="flex-1"></div>
+		{#if update.s.state === 'ready'}
+			<button
+				class="mx-3 mb-1.5 flex items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-2 text-left text-xs"
+				onclick={() => (update.open = true)}
+			>
+				<span class="h-1.75 w-1.75 rounded-full bg-ok"></span>
+				<span class="flex-1 truncate text-fg-2">Soteria {update.s.version} is ready</span>
+				<span class="font-medium text-accent-fg">Restart</span>
+			</button>
+		{/if}
 		{#if total}
 			{@const low = used / total >= 0.9}
 			<div class="flex flex-col gap-2 border-t border-line px-4 pt-3 pb-2 text-xs">

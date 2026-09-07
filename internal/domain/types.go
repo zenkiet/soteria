@@ -71,3 +71,14 @@ type IndexStatus struct {
 	Done    bool  `json:"done"`
 	At      int64 `json:"at"`
 }
+
+type Update struct {
+	Current string    `json:"current"`
+	State   string    `json:"state"`
+	Blocked bool      `json:"blocked"`
+	Version string    `json:"version"`
+	Notes   string    `json:"notes"`
+	Size    int64     `json:"size"`
+	Date    time.Time `json:"date"`
+	URL     string    `json:"url"`
+}

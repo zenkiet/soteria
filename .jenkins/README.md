@@ -7,8 +7,8 @@ Jenkins builds every branch and pull request, and publishes a GitHub release for
 | Setup | `setup.sh` | Checks the toolchain, installs Go modules and frontend packages |
 | Verify | `verify.sh` | gofmt, `go vet` (macOS and Windows), `go test`, prettier, eslint, svelte-check, frontend build |
 | Version | `version.sh` | Tag builds only. Writes the tag version into the Wails config and the frontend, regenerates the platform build assets |
-| Build macOS | `build-macos.sh arm64` and `amd64` | One DMG per architecture: `Soteria-<version>-macOS-apple-silicon.dmg`, `Soteria-<version>-macOS-intel.dmg` |
-| Build Windows | `build-windows.sh` | `Soteria-<version>-Windows-x64-Setup.exe` (NSIS, bundles the WebView2 bootstrapper) and `Soteria-<version>-Windows-x64.zip` (portable) |
+| Build macOS | `build-macos.sh arm64` and `amd64` | One DMG per architecture: `Soteria-<version>-macOS-apple-silicon.dmg`, `Soteria-<version>-macOS-intel.dmg`, plus `Soteria-<version>-darwin-<arch>.zip` for the in-app updater |
+| Build Windows | `build-windows.sh` | `Soteria-<version>-Windows-x64-Setup.exe` (NSIS, bundles the WebView2 bootstrapper) and `Soteria-<version>-windows-amd64.zip` (portable; also what the in-app updater downloads) |
 | Checksums | `checksums.sh` | `SHA256SUMS.txt` |
 | Publish | `release.sh` | Tag builds only. Creates the GitHub release with generated notes, marks `-beta`/`-rc` tags as pre-release, uploads `dist/*` |
 

@@ -8,14 +8,17 @@
 		Open,
 		PickFolder,
 		Quota,
+		RestartToUpdate,
 		Unmount,
+		check,
+		update,
 		type DriveInfo,
 		type QuotaInfo,
 		type Server
 	} from '@/shared/api';
-	import { bytes, msg, prefs, setPrefs, setTheme, theme, type Theme } from '@/shared/lib';
+	import { ago, bytes, msg, prefs, setPrefs, setTheme, theme, type Theme } from '@/shared/lib';
 	import { Icon } from '@/shared/ui';
-	import { System } from '@wailsio/runtime';
+	import { Browser, System } from '@wailsio/runtime';
 
 	let { server }: { server: Server } = $props();
 
@@ -66,7 +69,91 @@
 					? { text: `Connected · ${info.path}`, cls: 'text-fg-2', dot: 'bg-ok' }
 					: { text: 'Not connected', cls: 'text-fg-3', dot: 'bg-line-2' }
 	);
+
+	const upd = $derived.by(() => {
+		const s = update.s;
+		switch (s.state) {
+			case 'unconfigured':
+				return { dot: 'bg-line-2', cls: 'text-fg-3', text: 'Development build · updates are off' };
+			case 'checking':
+				return { dot: 'bg-warn', cls: 'text-fg-2', text: 'Checking…' };
+			case 'available':
+				return {
+					dot: 'bg-accent',
+					cls: 'text-fg-2',
+					text: `${s.version} available · ${bytes(s.size)}`,
+					btn: s.blocked ? 'Download…' : 'Update…',
+					primary: true,
+					run: s.blocked ? () => Browser.OpenURL(s.url) : () => (update.open = true)
+				};
+			case 'downloading':
+			case 'verifying':
+			case 'installing':
+				return { dot: 'bg-accent', cls: 'text-fg-2', text: 'Downloading…' };
+			case 'ready':
+				return {
+					dot: 'bg-ok',
+					cls: 'text-fg-2',
+					text: `${s.version} downloaded · restart to finish`,
+					btn: 'Restart & update',
+					primary: true,
+					run: RestartToUpdate
+				};
+			case 'error':
+				return {
+					dot: 'bg-danger',
+					cls: 'text-danger',
+					text: `Couldn’t check: ${update.error}`,
+					btn: 'Try again',
+					run: check
+				};
+			default:
+				return {
+					dot: 'bg-ok',
+					cls: 'text-fg-2',
+					text: update.checkedAt
+						? `Up to date · checked ${ago(update.checkedAt / 1000)}`
+						: 'Not checked yet',
+					btn: 'Check for updates',
+					run: check
+				};
+		}
+	});
 </script>
+
+{#snippet updates()}
+	<div class="flex items-center gap-3 rounded-lg border border-line p-3">
+		<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-2">
+			<img src="/bo.svg" alt="" class="h-6.5 w-6.5" />
+		</span>
+		<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+			<div class="font-medium">Soteria {__APP_VERSION__}</div>
+			<div class="flex items-center gap-1.5 text-xs {upd.cls}">
+				<span class="h-1.5 w-1.5 shrink-0 rounded-full {upd.dot}"></span>
+				<span class="truncate" title={upd.text}>{upd.text}</span>
+			</div>
+		</div>
+		{#if upd.btn}
+			<button class="btn {upd.primary ? 'btn-primary' : ''}" onclick={upd.run}>
+				{#if !upd.primary}<Icon name="refresh" size={15} />{/if}{upd.btn}
+			</button>
+		{/if}
+	</div>
+	<label class="flex items-center justify-between gap-6">
+		<span class="flex flex-col gap-0.5">
+			<span>Check for updates automatically</span>
+			<span class="text-xs text-fg-3"
+				>At launch and every 6 hours. Nothing installs without asking you.</span
+			>
+		</span>
+		<input
+			type="checkbox"
+			class="switch"
+			checked={prefs.autoUpdate}
+			onchange={(e) => setPrefs({ autoUpdate: e.currentTarget.checked })}
+		/>
+	</label>
+{/snippet}
 
 {#snippet drive()}
 	<label class="flex items-center justify-between gap-6">
@@ -266,6 +353,11 @@
 		{/if}
 		{#if desktop}
 			{@render section('Background', 'What happens when you close the window.', background)}
+			{@render section(
+				'Updates',
+				'New versions come from GitHub Releases and install in place.',
+				updates
+			)}
 		{/if}
 		{@render section('Appearance', 'Follows macOS by default.', appearance)}
 		{@render section('Downloads', 'Where downloaded files land.', downloads)}

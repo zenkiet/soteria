@@ -11,3 +11,4 @@ export type {
 } from '@bindings/soteria/internal/domain/models';
 export { connectDrive } from './drive';
 export { transfers } from './transfers.svelte';
+export { check, update } from './updates.svelte';

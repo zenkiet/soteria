@@ -78,3 +78,14 @@ export interface TrashItem {
     "from": string;
     "deleted": string;
 }
+
+export interface Update {
+    "current": string;
+    "state": string;
+    "blocked": boolean;
+    "version": string;
+    "notes": string;
+    "size": number;
+    "date": string;
+    "url": string;
+}

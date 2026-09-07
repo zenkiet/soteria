@@ -45,6 +45,7 @@ func Run(a *App, assets fs.FS) error {
 		OnShutdown: func() { _ = a.M.Unmount() },
 		ShouldQuit: a.shouldQuit,
 	})
+	a.initUpdater(wapp)
 
 	opts := application.WebviewWindowOptions{
 		Title:          "Soteria",

@@ -13,6 +13,8 @@ type Prefs = {
 	intro: Record<string, boolean>;
 	background: boolean;
 	notify: boolean;
+	autoUpdate: boolean;
+	skipVersion: string;
 };
 
 const DEFAULTS: Prefs = {
@@ -27,7 +29,9 @@ const DEFAULTS: Prefs = {
 	drive: {},
 	intro: {},
 	background: true,
-	notify: true
+	notify: true,
+	autoUpdate: true,
+	skipVersion: ''
 };
 
 function stored(): Prefs {

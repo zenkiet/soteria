@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 
 	"soteria/internal/app"
 	"soteria/internal/domain"
@@ -29,13 +30,16 @@ type App struct {
 	Bg *app.Background
 	M  *mount.Mounter
 
-	Dock  *dock.DockService
-	Notes *notifications.NotificationService
-	win   *application.WebviewWindow
-	state store.WindowState
-	mu    sync.Mutex
-	tray  *application.SystemTray
-	rt    *time.Timer
+	Version string
+	Dock    *dock.DockService
+	Notes   *notifications.NotificationService
+	win     *application.WebviewWindow
+	state   store.WindowState
+	mu      sync.Mutex
+	tray    *application.SystemTray
+	rt      *time.Timer
+	rel     *updater.Release
+	blocked bool
 }
 
 // Events sends to the webview; app packages only see the interface.

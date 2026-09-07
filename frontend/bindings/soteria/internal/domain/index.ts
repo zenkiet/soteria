@@ -9,5 +9,6 @@ export type {
     Quota,
     Server,
     Transfer,
-    TrashItem
+    TrashItem,
+    Update
 } from "./models.js";

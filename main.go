@@ -15,6 +15,8 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+var version string
+
 func main() {
 	sess := &app.Session{}
 	ev := wails.Events{}
@@ -33,7 +35,7 @@ func main() {
 	}
 	svc := &wails.App{
 		S: sess, F: &app.Files{S: sess, Index: idx}, T: tr, Tr: trash, I: idx,
-		Th: &app.Thumbs{S: sess, Dir: store.ThumbDir()}, Bg: app.NewBackground(tr), M: mnt,
+		Th: &app.Thumbs{S: sess, Dir: store.ThumbDir()}, Bg: app.NewBackground(tr), M: mnt, Version: version,
 	}
 	if err := wails.Run(svc, assets); err != nil {
 		log.Fatal(err)

@@ -17,6 +17,10 @@ export function CancelGroup(group: string): $CancellablePromise<void> {
     return $Call.ByID(3968580370, group);
 }
 
+export function CheckUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(2442005206);
+}
+
 export function Clear(): $CancellablePromise<void> {
     return $Call.ByID(3733565954);
 }
@@ -77,6 +81,13 @@ export function Indexed(): $CancellablePromise<domain$0.IndexStatus> {
 
 export function InstallDriver(): $CancellablePromise<void> {
     return $Call.ByID(3190090398);
+}
+
+/**
+ * InstallUpdate downloads and verifies in the background; progress arrives on the wails:updater:* events.
+ */
+export function InstallUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3404727425);
 }
 
 export function Link(p: string): $CancellablePromise<string> {
@@ -145,6 +156,10 @@ export function Reindex(): $CancellablePromise<void> {
     return $Call.ByID(1654599532);
 }
 
+export function RestartToUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(2853079796);
+}
+
 export function Restore(p: string): $CancellablePromise<void> {
     return $Call.ByID(3809830833, p);
 }
@@ -195,6 +210,10 @@ export function Trash(p: string): $CancellablePromise<string> {
 
 export function Unmount(): $CancellablePromise<void> {
     return $Call.ByID(3483254379);
+}
+
+export function UpdateStatus(): $CancellablePromise<domain$0.Update> {
+    return $Call.ByID(1731050910);
 }
 
 export function Upload(locals: string[] | null, dir: string): $CancellablePromise<domain$0.Conflict[] | null> {

@@ -4,7 +4,7 @@ source "$(dirname "$0")/lib.sh"
 log "Windows x64"
 rm -rf bin frontend/.svelte-kit
 keep_icons
-wails3 task windows:build ARCH=amd64 CGO_ENABLED=0
+wails3 task windows:build ARCH=amd64 CGO_ENABLED=0 VERSION="$VERSION"
 restore_icons
 
 log "Installer"
@@ -23,5 +23,5 @@ fi
 
 mkdir -p "$DIST"
 mv "bin/$APP-amd64-installer.exe" "$DIST/$APP-$VERSION-Windows-x64-Setup.exe"
-(cd bin && zip -q -9 "$DIST/$APP-$VERSION-Windows-x64.zip" "$APP.exe")
+(cd bin && zip -q -9 "$DIST/$APP-$VERSION-windows-amd64.zip" "$APP.exe")
 ls -la "$DIST"
