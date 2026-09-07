@@ -1,0 +1,94 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - ineffassign
+    - bodyclose
+    - errorlint
+    - forcetypeassert
+    - durationcheck
+    - makezero
+    - contextcheck
+    - gosec
+    - depguard
+    - nolintlint
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (golang.org/x/sys/windows/registry.Key).Close
+        - os.Remove
+    gosec:
+      excludes:
+        - G103 # DPAPI on Windows requires unsafe
+        - G104 # errcheck has managed this section
+        - G115 # Cast to int when dealing with image/interface sizes
+        - G204 # Command to open Explorer/Finder/WebDAV gets user path
+        - G301 # Download directory permission 0755
+        - G304 # Open files actively selected by the user via dialog
+        - G402 # Insecure tls
+        - G703 # file is a hex digest under Thumbs.Dir
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    depguard:
+      rules:
+        domain:
+          files: ["**/internal/domain/**"]
+          deny:
+            - pkg: soteria/internal
+              desc: The domain must not depend on other internal packages
+            - pkg: github.com/wailsapp
+              desc: Domain must not be related to the Wails framework
+        app:
+          files: ["**/internal/app/**"]
+          deny:
+            - pkg: soteria/internal/infra/wails
+              desc: The App layer must not depend back on the Wails inbound adapter
+            - pkg: github.com/wailsapp
+              desc: App layers cannot import Wails
+        infra:
+          files: ["**/internal/infra/**", "!**/internal/infra/wails/**"]
+          deny:
+            - pkg: soteria/internal/app
+              desc: Outbound adapters should not be dependent on use cases
+            - pkg: soteria/internal/infra/wails
+              desc: Outbound adapters must not depend on inbound adapters
+
+  exclusions:
+    paths:
+      - build
+    rules:
+      - path: _test\.go
+        linters: [gosec]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      module-path: soteria
+      extra:
+        group-params: true
+    goimports:
+      local-prefixes:
+        - soteria
+  exclusions:
+    paths:
+      - build
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
