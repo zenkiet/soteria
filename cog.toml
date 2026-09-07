@@ -9,17 +9,11 @@ branch_whitelist = ["main"]
 skip_ci = "[skip ci]"
 skip_untracked = false
 
-# Hooks validation & push
 pre_bump_hooks = [
-  "pnpm pkg set version={{version}}",
+  "TAG_NAME={{version_tag}} .jenkins/scripts/version.sh",
 ]
 
-post_bump_hooks = [
-  "git commit --amend -m 'chore: 🔖 bump version {{version}}'",
-  "git tag --force {{version_tag}}",
-  "git push origin main",
-  "git push origin --tags"
-]
+post_bump_hooks = []
 
 pre_package_bump_hooks = []
 post_package_bump_hooks = []

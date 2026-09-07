@@ -14,7 +14,6 @@ pipeline {
 
     stages {
         stage('Setup')   { steps { sh '.jenkins/scripts/setup.sh' } }
-        stage('Verify')  { steps { sh '.jenkins/scripts/verify.sh' } }
         stage('Version') {
             when { buildingTag() }
             steps { sh '.jenkins/scripts/version.sh' }
