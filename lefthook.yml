@@ -1,0 +1,44 @@
+commit-msg:
+  commands:
+    conventional-commit:
+      run: sh scripts/validate-commit-msg.sh "{1}"
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: go-format
+      glob: "*.go"
+      run: golangci-lint fmt --diff {staged_files}
+
+    - name: frontend-lint
+      root: frontend/
+      glob: "*.{ts,js,svelte,html}"
+      run: pnpm exec eslint --fix {staged_files}
+      stage_fixed: true
+
+    - name: frontend-format
+      root: frontend/
+      glob: "*.{ts,js,mjs,cjs,svelte,css,scss,html,json,yml,yaml}"
+      run: pnpm exec prettier --cache --write {staged_files}
+      stage_fixed: true
+
+    - name: frontend-type-check
+      root: frontend/
+      glob: "*.{ts,svelte}"
+      run: pnpm typecheck
+
+    - name: frontend-duplication
+      root: frontend/
+      glob: "*.{ts,js,svelte,css,html}"
+      run: pnpm dup
+
+pre-push:
+  parallel: true
+  commands:
+    go-lint:
+      run: golangci-lint run ./...
+    go-test:
+      run: go test ./...
+    frontend-verify:
+      root: frontend/
+      run: pnpm verify
