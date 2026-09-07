@@ -1,12 +1,12 @@
 {
 	"fixed": {
-		"file_version": "0.0.1"
+		"file_version": "0.1.0"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.0.1",
+			"ProductVersion": "0.1.0",
 			"CompanyName": "ZenSoftware",
-			"FileDescription": "A native desktop client for your self-hosted WebDAV storage.",
+			"FileDescription": "Soteria",
 			"LegalCopyright": "© 2026 ZenSoftware. All rights reserved.",
 			"ProductName": "Soteria",
 			"Comments": "Soteria by ZenSoftware"
