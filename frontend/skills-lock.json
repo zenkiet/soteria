@@ -1,0 +1,65 @@
+{
+	"version": 1,
+	"skills": {
+		"design-taste-frontend": {
+			"source": "Leonxlnx/taste-skill",
+			"sourceType": "github",
+			"skillPath": "skills/taste-skill/SKILL.md",
+			"computedHash": "6d838b246d0e35d0b53f4f23f98ba7a1dd561937e64f7d0c7553b0928e376c3e"
+		},
+		"feature-sliced-design": {
+			"source": "feature-sliced/skills",
+			"sourceType": "github",
+			"skillPath": "feature-sliced-design/SKILL.md",
+			"computedHash": "c82f20352d839903cff4cd4d686eca7fa2d2d22a0434e9ee63d3f20f182cd93d"
+		},
+		"gsap-core": {
+			"source": "greensock/gsap-skills",
+			"sourceType": "github",
+			"skillPath": "skills/gsap-core/SKILL.md",
+			"computedHash": "c4a01101d9e1aafbf4b49f75d74f9349790d8741981ba0237c990093863035a6"
+		},
+		"gsap-frameworks": {
+			"source": "greensock/gsap-skills",
+			"sourceType": "github",
+			"skillPath": "skills/gsap-frameworks/SKILL.md",
+			"computedHash": "4852e85a48088d9044b08ebd1db607915b628c0c3ec7e04300713f546728fbdf"
+		},
+		"gsap-plugins": {
+			"source": "greensock/gsap-skills",
+			"sourceType": "github",
+			"skillPath": "skills/gsap-plugins/SKILL.md",
+			"computedHash": "791bda0e6e460511fe82a78e745db519b88ffaeeab4d04a74879a03ca4f41740"
+		},
+		"gsap-scrolltrigger": {
+			"source": "greensock/gsap-skills",
+			"sourceType": "github",
+			"skillPath": "skills/gsap-scrolltrigger/SKILL.md",
+			"computedHash": "1cdc5647693783cb7a662d84a5de434c88a051ed56b4d33597c9b5782b5973e6"
+		},
+		"gsap-timeline": {
+			"source": "greensock/gsap-skills",
+			"sourceType": "github",
+			"skillPath": "skills/gsap-timeline/SKILL.md",
+			"computedHash": "54981c2feec5a9c0d57988aeb32315af32bdeadd261550d5e9db7a7b1f08b487"
+		},
+		"high-end-visual-design": {
+			"source": "Leonxlnx/taste-skill",
+			"sourceType": "github",
+			"skillPath": "skills/soft-skill/SKILL.md",
+			"computedHash": "7db385e4c5370e5a7fca9704a1361b056e4504ea6a03924bb86f33a4f00b5c73"
+		},
+		"image-to-code": {
+			"source": "Leonxlnx/taste-skill",
+			"sourceType": "github",
+			"skillPath": "skills/image-to-code-skill/SKILL.md",
+			"computedHash": "58517b03b2a01f4c9ba65861559d03df931400871bbc200978c975b24bb92c73"
+		},
+		"minimalist-ui": {
+			"source": "Leonxlnx/taste-skill",
+			"sourceType": "github",
+			"skillPath": "skills/minimalist-skill/SKILL.md",
+			"computedHash": "08873a3131d3be27bef9bf3304b310b16b44ca6e3561aebe532797be3443f6bd"
+		}
+	}
+}

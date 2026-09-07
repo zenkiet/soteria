@@ -1,0 +1,249 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/montserrat';
+
+@theme inline {
+	--font-sans:
+		'Montserrat Variable', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-line: var(--line);
+	--color-line-2: var(--line-2);
+	--color-fg: var(--fg);
+	--color-fg-2: var(--fg-2);
+	--color-fg-3: var(--fg-3);
+	--color-primary: var(--primary);
+	--color-on-primary: var(--on-primary);
+	--color-accent: var(--accent);
+	--color-accent-soft: var(--accent-soft);
+	--color-accent-fg: var(--accent-fg);
+	--color-ok: var(--ok);
+	--color-ok-soft: var(--ok-soft);
+	--color-warn: var(--warn);
+	--color-warn-soft: var(--warn-soft);
+	--color-danger: var(--danger);
+	--color-danger-soft: var(--danger-soft);
+	--color-on-danger: var(--on-danger);
+}
+
+:root {
+	color-scheme: light;
+	--bg: #f6f5f1;
+	--surface: #ffffff;
+	--surface-2: #efeee9;
+	--line: #e6e4de;
+	--line-2: #d8d5cd;
+	--fg: #1b1a17;
+	--fg-2: #6e6a62;
+	--fg-3: #9b978e;
+	--primary: #171614;
+	--on-primary: #ffffff;
+	--accent: #2e64c8;
+	--accent-soft: #e4ecfa;
+	--accent-fg: #1f4f9e;
+	--ok: #3b7a45;
+	--ok-soft: #e6f1e7;
+	--warn: #956400;
+	--warn-soft: #fbf3db;
+	--danger: #b3362f;
+	--danger-soft: #fbe9e7;
+	--on-danger: #ffffff;
+	--folder-a: #dce7f8;
+	--folder-b: #c6d8f4;
+	--folder-line: #3f6bb8;
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--bg: #151412;
+	--surface: #1c1b18;
+	--surface-2: #252420;
+	--line: #2c2b26;
+	--line-2: #3a3832;
+	--fg: #eceae4;
+	--fg-2: #a19d94;
+	--fg-3: #726f67;
+	--primary: #eceae4;
+	--on-primary: #151412;
+	--accent: #6f9be8;
+	--accent-soft: #1f2e4a;
+	--accent-fg: #a9c4f2;
+	--ok: #7fc48a;
+	--ok-soft: #1d3122;
+	--warn: #e0b25a;
+	--warn-soft: #382e16;
+	--danger: #e27a72;
+	--danger-soft: #3a201e;
+	--on-danger: #1a0f0e;
+	--folder-a: #25355a;
+	--folder-b: #2f457a;
+	--folder-line: #7fa3e6;
+}
+
+@layer base {
+	html,
+	body {
+		height: 100%;
+	}
+	body {
+		@apply bg-bg font-sans text-[13px] leading-[1.45] text-fg antialiased select-none;
+	}
+	button,
+	input {
+		font: inherit;
+	}
+	input,
+	[contenteditable] {
+		user-select: text;
+	}
+	kbd {
+		@apply rounded border border-line bg-surface-2 px-1 font-mono text-[11px] text-fg-3;
+	}
+	* {
+		scrollbar-width: none;
+	}
+	*::-webkit-scrollbar {
+		display: none;
+	}
+	.file-drop-target-active::after {
+		content: attr(data-drop-label);
+		@apply absolute inset-3 z-10 grid place-content-center rounded-[10px] border-2 border-dashed border-accent bg-surface/90 text-[15px] font-semibold;
+	}
+}
+
+@keyframes appear {
+	from {
+		opacity: 0;
+	}
+}
+@layer components {
+	/* Windows window controls, drawn like macOS traffic lights. */
+	.lights button {
+		position: relative;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: var(--c);
+		box-shadow: inset 0 0 0 0.5px var(--r);
+		color: var(--i);
+	}
+	.lights button::after {
+		content: '';
+		position: absolute;
+		inset: -4px;
+	}
+	.lights svg {
+		width: 12px;
+		height: 12px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.2;
+		stroke-linecap: round;
+		opacity: 0;
+	}
+	.lights:hover svg {
+		opacity: 1;
+	}
+	.lights.dim button {
+		background: var(--line-2);
+		box-shadow: none;
+	}
+	.btn {
+		@apply inline-flex h-8 items-center justify-center gap-2 rounded-md border border-line-2 bg-surface px-3 font-medium whitespace-nowrap text-fg hover:bg-surface-2 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply border-primary bg-primary text-on-primary hover:bg-primary hover:opacity-90;
+	}
+	.btn-danger {
+		@apply border-danger bg-danger text-on-danger hover:bg-danger hover:opacity-90;
+	}
+	.btn-ghost {
+		@apply border-transparent bg-transparent text-fg-2 hover:bg-surface-2 hover:text-fg;
+	}
+	.btn-icon {
+		@apply w-8 px-0;
+	}
+	.field {
+		@apply flex flex-col gap-1.5;
+	}
+	.label {
+		@apply text-xs font-medium text-fg-2;
+	}
+	.hint {
+		@apply text-xs text-fg-3;
+	}
+	.input {
+		@apply h-9 w-full rounded-md border border-line-2 bg-surface px-3 text-fg outline-none placeholder:text-fg-3 focus:border-accent focus:ring-3 focus:ring-accent-soft;
+	}
+	.nav-item {
+		@apply flex h-8 items-center gap-2.5 rounded-md border border-transparent px-2.5 text-fg-2 hover:text-fg;
+	}
+	.nav-item.active {
+		@apply border-line bg-surface font-medium text-fg;
+	}
+	.menu {
+		@apply w-56 rounded-lg border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)];
+	}
+	.switch {
+		@apply relative h-4.5 w-8 shrink-0 appearance-none rounded-full bg-line-2 transition-colors checked:bg-primary disabled:opacity-50;
+	}
+	.switch::after {
+		content: '';
+		@apply absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full bg-surface transition-transform;
+	}
+	.switch:checked::after {
+		transform: translateX(14px);
+	}
+	.menu-item {
+		@apply flex h-[30px] w-full items-center gap-2.5 rounded-[5px] px-2.5 text-left hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50;
+	}
+	.skeleton {
+		animation: appear 0s 150ms both;
+	}
+	.skeleton .bg-surface-2 {
+		@apply animate-pulse;
+	}
+}
+
+.doc {
+	@apply text-sm leading-relaxed;
+}
+.doc h1 {
+	@apply mb-3 text-2xl font-semibold tracking-tight;
+}
+.doc h2 {
+	@apply mt-5 mb-2 text-lg font-semibold;
+}
+.doc h3 {
+	@apply mt-4 mb-2 font-semibold;
+}
+.doc p {
+	@apply mb-3;
+}
+.doc ul {
+	@apply mb-3 list-disc pl-6;
+}
+.doc ol {
+	@apply mb-3 list-decimal pl-6;
+}
+.doc table {
+	@apply mb-3 w-full border-collapse text-xs;
+}
+.doc td,
+.doc th {
+	@apply border border-line px-2 py-1.5 text-left;
+}
+.doc img {
+	@apply my-3 max-w-full;
+}
+.doc a {
+	@apply text-accent-fg underline;
+}
+/* Unlayered on purpose: these must beat utilities like px-5 and flex. */
+.sidebar.gone {
+	display: none;
+}
+main[data-sidebar='hidden'] > header {
+	padding-left: calc(var(--lead) + 2.5rem);
+}
