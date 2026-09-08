@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.1](https://github.com/zenkiet/soteria/compare/fbfe84efecf3c15f4bcedd0f99b1b714c8ef19c2..v0.2.1) - 2026-09-08
+#### 🐛 Bug Fixes
+- 🐛 handle background running - ([fbfe84e](https://github.com/zenkiet/soteria/commit/fbfe84efecf3c15f4bcedd0f99b1b714c8ef19c2)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.2.0](https://github.com/zenkiet/soteria/compare/7049da5e4605cc69ca94bc23cdf78f1d98faed3c..v0.2.0) - 2026-09-07
 #### 🚀 Features
 - (**core**) ✨ implement live update - ([7049da5](https://github.com/zenkiet/soteria/commit/7049da5e4605cc69ca94bc23cdf78f1d98faed3c)) - [@zenkiet](https://github.com/zenkiet)
