@@ -118,6 +118,7 @@ func (a *App) show(path string) {
 	if a.win == nil {
 		return
 	}
+	a.Dock.ShowAppIcon()
 	a.win.Show()
 	a.win.Focus()
 	if path != "" {

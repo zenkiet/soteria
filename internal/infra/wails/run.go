@@ -36,12 +36,10 @@ func Run(a *App, assets fs.FS) error {
 				if win != nil {
 					win.Show()
 					win.Restore()
-					win.Focus()
 				}
 			},
 		},
 		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets), Middleware: a.middleware},
-		Mac:        application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		OnShutdown: func() { _ = a.M.Unmount() },
 		ShouldQuit: a.shouldQuit,
 	})
@@ -80,6 +78,7 @@ func Run(a *App, assets fs.FS) error {
 		if a.Bg.Enabled() {
 			e.Cancel()
 			win.Hide()
+			a.Dock.HideAppIcon()
 			a.hint()
 		}
 	})
