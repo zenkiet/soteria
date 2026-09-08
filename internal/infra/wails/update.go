@@ -19,7 +19,7 @@ func (a *App) initUpdater(wapp *application.App) {
 	if a.Version == "" {
 		return
 	}
-	gh, _ := github.New(github.Config{Repository: "blogic-kietle/BStorage", ChecksumAsset: "SHA256SUMS.txt", AssetMatcher: matchAsset})
+	gh, _ := github.New(github.Config{Repository: "zenkiet/soteria", ChecksumAsset: "SHA256SUMS.txt", AssetMatcher: matchAsset})
 	_ = wapp.Updater.Init(updater.Config{CurrentVersion: a.Version, Providers: []updater.Provider{gh}, Window: updater.WindowNone})
 	exe, _ := os.Executable()
 	dir := filepath.Dir(exe)
