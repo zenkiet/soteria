@@ -7,7 +7,8 @@ export type {
 	Quota as QuotaInfo,
 	Server,
 	Transfer,
-	TrashItem
+	TrashItem,
+	Usage
 } from '@bindings/soteria/internal/domain/models';
 export { connectDrive } from './drive';
 export { transfers } from './transfers.svelte';

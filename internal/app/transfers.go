@@ -349,6 +349,7 @@ func (a *Transfers) DownloadDir(remote, dest string) error {
 		return err
 	}
 	base := filepath.Join(downloadDir(dest), path.Base(remote))
+	_ = os.MkdirAll(base, 0o755)
 	for _, e := range entries {
 		rel := strings.TrimPrefix(e.Path, remote+"/")
 		local := filepath.Join(base, filepath.FromSlash(rel))

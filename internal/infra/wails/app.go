@@ -3,7 +3,6 @@
 package wails
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 
 	"soteria/internal/app"
 	"soteria/internal/domain"
-	"soteria/internal/infra/drag"
 	"soteria/internal/infra/mount"
 	"soteria/internal/infra/shell"
 	"soteria/internal/infra/store"
@@ -116,9 +114,10 @@ func (a *App) Purge(p string) error                   { return a.Tr.Purge(p) }
 func (a *App) EmptyTrash() error                      { return a.Tr.Empty() }
 
 // search
-func (a *App) Reindex()                    { a.I.Reindex() }
-func (a *App) Indexed() domain.IndexStatus { return a.I.Status() }
-func (a *App) Recent(n int) []domain.Entry { return a.I.Recent(n) }
+func (a *App) Reindex()                            { a.I.Reindex() }
+func (a *App) Indexed() domain.IndexStatus         { return a.I.Status() }
+func (a *App) Recent(n int) []domain.Entry         { return a.I.Recent(n) }
+func (a *App) FolderUsage(dir string) domain.Usage { return a.I.Usage(dir) }
 func (a *App) Search(q string) []domain.Entry {
 	return a.I.Search(q)
 }
@@ -132,17 +131,10 @@ func (a *App) Open(p string) error          { return shell.Open(p) }
 
 func (a *App) LogPath() string { return store.LogPath() }
 
-// DragOut starts a native drag of remote files; Finder asks for each file on drop and it is downloaded there.
+// DragOut starts a native drag of remote files using the platform adapter.
 func (a *App) DragOut(entries []domain.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	win, ok := application.Get().Window.Current().(*application.WebviewWindow)
-	if !ok {
-		return errors.New("no window")
-	}
-	a.T.SetDragging(entries)
-	var err error
-	application.InvokeSync(func() { err = drag.Start(win.NativeWindow(), entries) })
-	return err
+	return a.dragOut(entries)
 }

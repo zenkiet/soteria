@@ -10,6 +10,7 @@
 		Download,
 		DownloadDir,
 		DragOut,
+		FolderUsage,
 		Indexed,
 		Link,
 		Open,
@@ -27,7 +28,8 @@
 		type Conflict,
 		type Entry,
 		type IndexStatus,
-		type Server
+		type Server,
+		type Usage
 	} from '@/shared/api';
 	import {
 		ago,
@@ -42,7 +44,6 @@
 		pop,
 		prefs,
 		previewKind,
-		previewUrl,
 		reveal,
 		setPrefs,
 		thumbUrl,
@@ -54,6 +55,7 @@
 	import { Dialog, Icon } from '@/shared/ui';
 	import { Clipboard, Events, System } from '@wailsio/runtime';
 	import { untrack } from 'svelte';
+	import { movable } from './drop.ts';
 	import ConflictDialog, { type Resolution } from './ui/conflict-dialog.svelte';
 	import DetailsPanel, { type Action } from './ui/details-panel.svelte';
 	import MoveDialog from './ui/move-dialog.svelte';
@@ -66,6 +68,7 @@
 	const server = $derived(page.data.server as Server);
 
 	let entries = $state<Entry[]>([]);
+	let usage = $state<Record<string, Usage>>({});
 	let loading = $state(true);
 	let error = $state('');
 	let query = $state('');
@@ -93,11 +96,18 @@
 	];
 	const sortLabel = $derived(SORTS.find(([k]) => k === prefs.sort)?.[1] ?? 'Name');
 
+	const entrySize = (e: Entry) =>
+		e.dir ? (usage[e.path]?.known ? usage[e.path].bytes : null) : e.size;
+	const shownSize = (e: Entry) => {
+		const n = entrySize(e);
+		return n === null ? '—' : bytes(n);
+	};
+
 	function compare(a: Entry, b: Entry) {
 		const k = prefs.sort;
 		let r =
 			k === 'size'
-				? a.size - b.size
+				? (entrySize(a) ?? -1) - (entrySize(b) ?? -1)
 				: k === 'modified'
 					? Date.parse(a.modified) - Date.parse(b.modified)
 					: k === 'created'
@@ -127,12 +137,20 @@
 	const shown = $derived(searching ? hits : rows);
 	const viewable = $derived(shown.filter((e) => !e.dir && previewKind(e.name)));
 	const picked = $derived(shown.filter((e) => sel.includes(e.path)));
-	const single = $derived(picked.length === 1 && !picked[0].dir ? picked[0] : null);
+	const single = $derived(picked.length === 1 ? picked[0] : null);
+
+	async function loadUsage(list: Entry[], d: string) {
+		const pairs = await Promise.all(
+			list.filter((e) => e.dir).map(async (e) => [e.path, await FolderUsage(e.path)] as const)
+		);
+		if (dir === d) usage = Object.fromEntries(pairs);
+	}
 
 	async function load(d: string) {
 		loading = true;
 		try {
 			entries = (await List(d)) ?? [];
+			loadUsage(entries, d);
 			error = '';
 			const f = page.url.searchParams.get('focus');
 			if (f) {
@@ -192,6 +210,7 @@
 	$effect(() =>
 		Events.On('index', (ev) => {
 			idx = ev.data;
+			loadUsage(entries, dir);
 			if (searching) Search(query).then((r) => (results = r ?? []));
 		})
 	);
@@ -231,10 +250,15 @@
 		}
 	}
 
-	async function run(action: () => Promise<unknown>, done: string, undo?: () => Promise<unknown>) {
+	async function run(
+		action: () => Promise<unknown>,
+		done: string | (() => string),
+		undo?: () => Promise<unknown>
+	) {
 		try {
 			await action();
-			toast(done, 'ok', undo && { label: 'Undo', run: () => run(undo, 'Undone') });
+			const text = typeof done === 'string' ? done : done();
+			toast(text, 'ok', undo && { label: 'Undo', run: () => run(undo, 'Undone') });
 			await load(dir);
 		} catch (e) {
 			toast(msg(e), 'error');
@@ -284,15 +308,24 @@
 			);
 	}
 
-	function moveAll(dest: string) {
-		const items = targets;
+	function moveAll(dest: string, items = targets) {
+		const moved: Entry[] = [];
+		let failed = '';
 		run(
 			async () => {
-				for (const e of items) await Move(e.path, join(dest, e.name));
+				for (const e of items) {
+					try {
+						await Move(e.path, join(dest, e.name));
+						moved.push(e);
+					} catch (err) {
+						failed ||= msg(err);
+					}
+				}
+				if (!moved.length) throw new Error(failed);
 			},
-			`Moved to ${dest}`,
+			() => (failed ? `Moved ${moved.length} of ${items.length} · ${failed}` : `Moved to ${dest}`),
 			async () => {
-				for (const e of items) await Move(join(dest, e.name), e.path);
+				for (const e of moved) await Move(join(dest, e.name), e.path);
 			}
 		);
 	}
@@ -370,9 +403,12 @@
 		cursor = e.path;
 		if (ev.shiftKey && anchor) {
 			const a = shown.findIndex((x) => x.path === anchor);
-			const b = shown.findIndex((x) => x.path === e.path);
-			sel = shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
-			return;
+			if (a >= 0) {
+				const b = shown.findIndex((x) => x.path === e.path);
+				sel = shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
+				return;
+			}
+			// the anchored row is gone (moved, deleted, filtered): fall through and re-anchor
 		}
 		if (ev.metaKey || ev.ctrlKey) {
 			sel = sel.includes(e.path) ? sel.filter((p) => p !== e.path) : [...sel, e.path];
@@ -420,14 +456,21 @@
 		role: 'button',
 		tabindex: 0,
 		'data-path': e.path,
-		draggable: !e.dir,
+		title:
+			!e.dir && System.IsWindows()
+				? 'Ctrl + drag to copy to Explorer (Connect Drive required)'
+				: undefined,
+		draggable: true,
 		onclick: (ev: MouseEvent) => pick(e, ev),
 		onkeydown: (ev: KeyboardEvent) => ev.key === 'Enter' && openEntry(e),
 		ondblclick: () => openEntry(e),
 		ondragstart: (ev: DragEvent) => dragStart(ev, e),
-		ondragend: () => (draggingOut = false),
-		oncontextmenu: (ev: MouseEvent) => showMenu(ev, e)
+		ondragend: dragEnd,
+		oncontextmenu: (ev: MouseEvent) => showMenu(ev, e),
+		...(e.dir ? dropTarget(e.path) : {})
 	});
+
+	const dropRing = 'bg-accent-soft shadow-[inset_0_0_0_2px_var(--accent)]';
 
 	function showMenu(ev: MouseEvent, e: Entry) {
 		ev.preventDefault();
@@ -463,7 +506,7 @@
 			pick(e, ev);
 			document.querySelector<HTMLElement>(`[data-path="${CSS.escape(e.path)}"]`)?.focus();
 		} else if (ev.key === ' ' && !(ev.target instanceof HTMLButtonElement)) {
-			if (single) preview = single;
+			if (single && !single.dir) preview = single;
 			else return;
 		} else if (!mod) return;
 		else if (k === 'a') sel = shown.map((e) => e.path);
@@ -484,29 +527,61 @@
 	}
 
 	let draggingOut = $state(false);
+	let dragging = $state<Entry[]>([]);
+	let over = $state('');
 	$effect(() => Events.On('dragend', () => (draggingOut = false)));
 
+	const dropTarget = (to: string) => ({
+		ondragenter: (ev: DragEvent) => hover(ev, to),
+		ondragover: (ev: DragEvent) => hover(ev, to),
+		ondragleave: (ev: DragEvent) => {
+			// A dragleave also bubbles from a child, where the pointer is still inside the target.
+			if (over === to && !(ev.currentTarget as Element).contains(ev.relatedTarget as Node))
+				over = '';
+		},
+		ondrop: (ev: DragEvent) => drop(ev, to)
+	});
+
+	function hover(ev: DragEvent, to: string) {
+		if (!movable(dragging, to).length) return; // no preventDefault means the drop is refused
+		ev.preventDefault();
+		if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+		over = to;
+	}
+
+	function drop(ev: DragEvent, to: string) {
+		ev.preventDefault();
+		const items = movable(dragging, to);
+		dragging = [];
+		over = '';
+		if (items.length) moveAll(to, items);
+	}
+
+	// Ctrl selects native copy-out on Windows; ordinary drags still move inside the app.
 	function dragStart(ev: DragEvent, e: Entry) {
-		const items = (sel.includes(e.path) ? picked : [e]).filter((x) => !x.dir);
-		if (!items.length) {
+		const items = sel.includes(e.path) ? picked : [e];
+		if (!e.dir && (System.IsMac() || (System.IsWindows() && ev.ctrlKey))) {
+			const out = items.filter((x) => !x.dir);
+			if (!out.length) {
+				ev.preventDefault();
+				return;
+			}
+			draggingOut = true;
 			ev.preventDefault();
-			return;
-		}
-		draggingOut = true;
-		if (System.IsMac()) {
-			ev.preventDefault();
-			DragOut(items).catch((err) => {
+			DragOut(out).catch((err) => {
 				draggingOut = false;
 				toast(msg(err), 'error');
 			});
-		} else {
-			ev.dataTransfer?.setData(
-				'DownloadURL',
-				items
-					.map((x) => `application/octet-stream:${x.name}:${location.origin}${previewUrl(x.path)}`)
-					.join('\n')
-			);
+			return;
 		}
+		dragging = items;
+		if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+	}
+
+	function dragEnd() {
+		// Native completion owns draggingOut; cancelling HTML drag must not re-enable uploads.
+		dragging = [];
+		over = '';
 	}
 
 	const cols =
@@ -542,11 +617,12 @@
 
 {#snippet row(e: Entry)}
 	<div
-		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 hover:bg-surface-2 {cols} {on(
-			e
-		)
-			? 'bg-accent-soft hover:bg-accent-soft'
-			: ''}"
+		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 hover:bg-surface-2 {cols} {over ===
+		e.path
+			? dropRing
+			: on(e)
+				? 'bg-accent-soft hover:bg-accent-soft'
+				: ''}"
 		{...entryProps(e)}
 	>
 		<div class="flex min-w-0 items-center gap-2.5">
@@ -554,7 +630,7 @@
 			<span class="truncate">{e.name}</span>
 		</div>
 		<div class="hidden truncate text-xs text-fg-3 @4xl:block">{kind(e)}</div>
-		<div class="text-right font-mono text-xs text-fg-2">{e.dir ? '—' : bytes(e.size)}</div>
+		<div class="text-right font-mono text-xs text-fg-2">{shownSize(e)}</div>
 		<div class="text-xs text-fg-2">{when(e.modified)}</div>
 		<div class="hidden text-xs text-fg-2 @4xl:block">{when(e.created)}</div>
 		{@render dots(e)}
@@ -574,12 +650,26 @@
 		</button>
 	</div>
 	<nav class="flex min-w-0 flex-1 items-center gap-2 font-medium whitespace-nowrap">
-		<a href={filesHref('')} class={crumbs.length ? 'text-fg-2 hover:text-fg' : ''}>Files</a>
+		<a
+			href={filesHref('')}
+			class="rounded px-1.5 py-0.5 {over === '/'
+				? dropRing
+				: crumbs.length
+					? 'text-fg-2 hover:text-fg'
+					: ''}"
+			{...dropTarget('/')}>Files</a
+		>
 		{#each crumbs as c, i (i)}
+			{@const to = '/' + crumbs.slice(0, i + 1).join('/')}
 			<span class="text-fg-3">/</span>
 			<a
-				href={filesHref('/' + crumbs.slice(0, i + 1).join('/'))}
-				class="truncate {i < crumbs.length - 1 ? 'text-fg-2 hover:text-fg' : ''}">{c}</a
+				href={filesHref(to)}
+				class="truncate rounded px-1.5 py-0.5 {over === to
+					? dropRing
+					: i < crumbs.length - 1
+						? 'text-fg-2 hover:text-fg'
+						: ''}"
+				{...dropTarget(to)}>{c}</a
 			>
 		{/each}
 	</nav>
@@ -761,7 +851,7 @@
 								</div>
 							</div>
 							<div class="text-right font-mono text-xs text-fg-2">
-								{e.dir ? '—' : bytes(e.size)}
+								{shownSize(e)}
 							</div>
 							<div class="text-xs text-fg-2">{when(e.modified)}</div>
 							{@render dots(e)}
@@ -826,11 +916,12 @@
 						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" use:reveal>
 							{#each folders as e (e.path)}
 								<div
-									class="flex flex-col gap-3.5 rounded-lg border bg-surface p-3.5 hover:bg-surface-2 {on(
-										e
-									)
-										? 'border-accent bg-accent-soft hover:bg-accent-soft'
-										: 'border-line'}"
+									class="flex flex-col gap-3.5 rounded-lg border bg-surface p-3.5 hover:bg-surface-2 {over ===
+									e.path
+										? `border-accent ${dropRing}`
+										: on(e)
+											? 'border-accent bg-accent-soft hover:bg-accent-soft'
+											: 'border-line'}"
 									{...entryProps(e)}
 								>
 									<Icon name="folderFill" size={36} />

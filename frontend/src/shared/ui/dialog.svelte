@@ -37,7 +37,7 @@
 <dialog
 	bind:this={el}
 	{onclose}
-	class="m-auto w-100 rounded-[10px] border border-line bg-surface p-5 text-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] backdrop:bg-black/20"
+	class="m-auto w-100 rounded-[10px] border border-line bg-surface p-5 text-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] backdrop:bg-black/35 backdrop:backdrop-blur-sm"
 >
 	<div class="mb-4 flex items-center gap-3.5">
 		{#if lead}{@render lead()}{/if}

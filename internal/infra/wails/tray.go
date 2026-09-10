@@ -42,6 +42,9 @@ func (a *App) SetBackground(on, notify bool) {
 		} else {
 			a.tray.SetIcon(glyph(32, color.Black)).SetDarkModeIcon(glyph(32, color.White))
 		}
+		if runtime.GOOS == "windows" {
+			a.tray.OnDoubleClick(func() { a.show("") })
+		}
 	}
 	if destroy {
 		a.tray.Destroy()

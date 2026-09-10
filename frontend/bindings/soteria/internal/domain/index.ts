@@ -10,5 +10,6 @@ export type {
     Server,
     Transfer,
     TrashItem,
-    Update
+    Update,
+    Usage
 } from "./models.js";

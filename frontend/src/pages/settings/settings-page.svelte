@@ -7,8 +7,10 @@
 		connectDrive,
 		Open,
 		PickFolder,
+		LaunchAtLogin,
 		Quota,
 		RestartToUpdate,
+		SetLaunchAtLogin,
 		Unmount,
 		check,
 		update,
@@ -37,6 +39,18 @@
 		if (d) setPrefs({ downloadDir: d });
 	}
 
+	let atLogin = $state(false);
+	let loginError = $state('');
+	async function toggleLogin(on: boolean) {
+		loginError = '';
+		try {
+			await SetLaunchAtLogin(on);
+		} catch (e) {
+			loginError = msg(e);
+		}
+		atLogin = await LaunchAtLogin(); // the OS is the truth, not what was clicked
+	}
+
 	let logPath = $state('');
 	LogPath().then((p) => (logPath = p));
 	const desktop = System.IsMac() || System.IsWindows();
@@ -47,6 +61,7 @@
 	let driveError = $state('');
 	const refreshDrive = () => Drive().then((d) => (info = d));
 	if (desktop) refreshDrive();
+	if (desktop) LaunchAtLogin().then((v) => (atLogin = v));
 
 	async function toggleDrive(on: boolean) {
 		busy = true;
@@ -120,6 +135,37 @@
 		}
 	});
 </script>
+
+{#snippet startup()}
+	<label class="flex items-center justify-between gap-6">
+		<span class="flex flex-col gap-0.5">
+			<span>Open Soteria when you log in</span>
+			<span class="text-xs {loginError ? 'text-danger' : 'text-fg-3'}">
+				{loginError || 'The window still opens; macOS gives no way to start hidden.'}
+			</span>
+		</span>
+		<input
+			type="checkbox"
+			class="switch"
+			bind:checked={atLogin}
+			onchange={(e) => toggleLogin(e.currentTarget.checked)}
+		/>
+	</label>
+	<label class="flex items-center justify-between gap-6">
+		<span class="flex flex-col gap-0.5">
+			<span>Reconnect to the last server</span>
+			<span class="text-xs text-fg-3">
+				Sign in again with the password in the Keychain, so the drive comes back on its own.
+			</span>
+		</span>
+		<input
+			type="checkbox"
+			class="switch"
+			checked={prefs.reconnect}
+			onchange={(e) => setPrefs({ reconnect: e.currentTarget.checked })}
+		/>
+	</label>
+{/snippet}
 
 {#snippet updates()}
 	<div class="flex items-center gap-3 rounded-lg border border-line p-3">
@@ -343,29 +389,18 @@
 
 <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-5">
 	<div class="max-w-full divide-y divide-line">
-		{@render section('Account', 'The server this window is signed in to.', account)}
+		{@render section('Account', 'The server this window is signed in to', account)}
 		{#if desktop}
-			{@render section(
-				'Network drive',
-				`Shows this server in ${where} as a drive named Soteria, using the same login.`,
-				drive
-			)}
+			{@render section('Network drive', `Shows this server in ${where} as a drive`, drive)}
 		{/if}
 		{#if desktop}
-			{@render section('Background', 'What happens when you close the window.', background)}
-			{@render section(
-				'Updates',
-				'New versions come from GitHub Releases and install in place.',
-				updates
-			)}
+			{@render section('Startup', 'What happens when you log in.', startup)}
+			{@render section('Background', 'What happens when you close window', background)}
+			{@render section('Updates', 'Check new versions and install in place', updates)}
 		{/if}
 		{@render section('Appearance', 'Follows macOS by default.', appearance)}
 		{@render section('Downloads', 'Where downloaded files land.', downloads)}
-		{@render section(
-			'Trash',
-			'Deleting moves items to a hidden .trash folder on the server.',
-			trash
-		)}
+		{@render section('Trash', 'Deleting items to a hidden .trash folder on the server.', trash)}
 		{@render section('Storage', `Quota is set on the server for ${server.username}.`, storage)}
 		{@render section('Diagnostics', 'For when something goes wrong.', diagnostics)}
 	</div>

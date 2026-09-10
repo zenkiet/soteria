@@ -1,13 +1,37 @@
+<script module lang="ts">
+	let tried = false; // module scope: reconnect at launch, not every time this page is shown
+</script>
+
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { ConnectSaved, Forget, Servers, type Server } from '@/shared/api';
-	import { msg, reveal, toast } from '@/shared/lib';
+	import { msg, prefs, reveal, toast } from '@/shared/lib';
 	import { Icon } from '@/shared/ui';
 	import { System } from '@wailsio/runtime';
 
 	let servers = $state<Server[]>([]);
 	let busy = $state('');
-	Servers().then((l) => (servers = l ?? []));
+	Servers().then((l) => {
+		servers = l ?? [];
+		// The list is most-recent-first. Reconnecting fails when no password was kept, and the list
+		// is then the right thing to be looking at, so the error stays quiet.
+		if (prefs.reconnect && !tried && servers.length) {
+			tried = true;
+			reconnect(servers[0]);
+		}
+	});
+
+	async function reconnect(s: Server) {
+		busy = s.id;
+		try {
+			await ConnectSaved(s.id);
+			if (page.route.id === '/') await goto('/files');
+		} catch (e) {
+			if (!msg(e).includes('password required')) toast(msg(e), 'error');
+		}
+		busy = '';
+	}
 
 	async function pick(s: Server) {
 		busy = s.id;
@@ -72,6 +96,7 @@
 							<button
 								class="btn btn-ghost h-7 w-7 px-0"
 								onclick={() => forget(s)}
+								disabled={!!busy}
 								aria-label="Forget {s.name}"><Icon name="x" size={14} /></button
 							>
 						</div>
