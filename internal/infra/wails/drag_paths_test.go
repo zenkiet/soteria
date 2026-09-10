@@ -62,8 +62,8 @@ func TestWindowsDragPathsRejectsSelection(t *testing.T) {
 		{"UNC root", domain.Drive{Mounted: true, Path: `\\server\share\`}, nil, "valid mounted drive root"},
 		{"device root", domain.Drive{Mounted: true, Path: `\\?\Z:\`}, nil, "valid mounted drive root"},
 		{"folder", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/folder", Dir: true}}, "files only"},
-		{"different parents", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/a/x"}, {Path: "/b/y"}}, "same folder"},
-		{"parent case alias", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/a/x"}, {Path: "/A/y"}}, "same folder"},
+		{"different parents", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/a/x"}, {Path: "/b/y"}}, "one folder at a time"},
+		{"parent case alias", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/a/x"}, {Path: "/A/y"}}, "one folder at a time"},
 		{"invalid second file", domain.Drive{Mounted: true, Path: `Z:\`}, []domain.Entry{{Path: "/safe"}, {Path: "/../escape"}}, "unsafe Windows path segment"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

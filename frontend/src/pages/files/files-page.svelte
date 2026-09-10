@@ -25,6 +25,7 @@
 		Trash,
 		Upload,
 		UploadAs,
+		connectDrive,
 		type Conflict,
 		type Entry,
 		type IndexStatus,
@@ -456,14 +457,12 @@
 		role: 'button',
 		tabindex: 0,
 		'data-path': e.path,
-		title:
-			!e.dir && System.IsWindows()
-				? 'Ctrl + drag to copy to Explorer (Connect Drive required)'
-				: undefined,
+		title: !e.dir && System.IsWindows() ? 'Ctrl + drag to copy to Explorer' : undefined,
 		draggable: true,
 		onclick: (ev: MouseEvent) => pick(e, ev),
 		onkeydown: (ev: KeyboardEvent) => ev.key === 'Enter' && openEntry(e),
 		ondblclick: () => openEntry(e),
+		onpointerdown: (ev: PointerEvent) => pointerDown(ev, e),
 		ondragstart: (ev: DragEvent) => dragStart(ev, e),
 		ondragend: dragEnd,
 		oncontextmenu: (ev: MouseEvent) => showMenu(ev, e),
@@ -557,29 +556,66 @@
 		if (items.length) moveAll(to, items);
 	}
 
-	// Ctrl selects native copy-out on Windows; ordinary drags still move inside the app.
+	function dragOut(items: Entry[]) {
+		draggingOut = true;
+		DragOut(items).catch((err) => {
+			draggingOut = false;
+			const text = msg(err);
+			// Windows drags real files off the mounted drive, so offer to connect it when it is off.
+			if (!text.includes('connect and mount')) return toast(text, 'error');
+			toast('Connect the drive to drag files to Explorer', 'error', {
+				label: 'Connect',
+				run: () =>
+					connectDrive().then(
+						() => toast('Drive connected, you can now drag files to Explorer'),
+						(e) => toast(msg(e), 'error')
+					)
+			});
+		});
+	}
+
+	// Windows drag-out cannot start from dragstart: by then the webview has committed to its own
+	// drag loop, and preventDefault just cancels the gesture instead of yielding it. So watch the
+	// pointer directly and hand the still-held button to the Shell before the webview reaches its
+	// drag threshold. Ctrl distinguishes copy-out from an ordinary in-app move; requiring movement
+	// first keeps plain Ctrl+click working as multi-select.
+	function pointerDown(ev: PointerEvent, e: Entry) {
+		if (!System.IsWindows() || e.dir || ev.button !== 0 || !ev.ctrlKey) return;
+		const out = (sel.includes(e.path) ? picked : [e]).filter((x) => !x.dir);
+		if (!out.length) return;
+		const row = ev.currentTarget as HTMLElement;
+		const { clientX, clientY } = ev;
+		// Keep the webview from racing us with an HTML5 drag of its own.
+		row.draggable = false;
+		const stop = () => {
+			row.draggable = true;
+			removeEventListener('pointermove', move);
+			removeEventListener('pointerup', stop);
+		};
+		const move = (m: PointerEvent) => {
+			if (Math.abs(m.clientX - clientX) < 5 && Math.abs(m.clientY - clientY) < 5) return;
+			stop();
+			dragOut(out);
+		};
+		addEventListener('pointermove', move);
+		addEventListener('pointerup', stop);
+	}
+
 	function dragStart(ev: DragEvent, e: Entry) {
 		const items = sel.includes(e.path) ? picked : [e];
-		if (!e.dir && (System.IsMac() || (System.IsWindows() && ev.ctrlKey))) {
-			const out = items.filter((x) => !x.dir);
-			if (!out.length) {
-				ev.preventDefault();
-				return;
-			}
-			draggingOut = true;
+		// macOS has a real native API for this, so the drag can be taken over from dragstart.
+		if (!e.dir && System.IsMac()) {
 			ev.preventDefault();
-			DragOut(out).catch((err) => {
-				draggingOut = false;
-				toast(msg(err), 'error');
-			});
+			const out = items.filter((x) => !x.dir);
+			if (out.length) dragOut(out);
 			return;
 		}
 		dragging = items;
 		if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
 	}
 
+	// draggingOut is cleared by the native "dragend" event once the platform drag finishes.
 	function dragEnd() {
-		// Native completion owns draggingOut; cancelling HTML drag must not re-enable uploads.
 		dragging = [];
 		over = '';
 	}

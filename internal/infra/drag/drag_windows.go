@@ -15,19 +15,19 @@ import (
 )
 
 var (
-	OnWrite func(remote, dest string) error
-	OnEnded func()
-
 	shell32 = windows.NewLazySystemDLL("shell32.dll")
 	ole32   = windows.NewLazySystemDLL("ole32.dll")
+	user32  = windows.NewLazySystemDLL("user32.dll")
 
 	shParseDisplayName                = shell32.NewProc("SHParseDisplayName")
 	shCreateShellItemArrayFromIDLists = shell32.NewProc("SHCreateShellItemArrayFromIDLists")
 	shDoDragDrop                      = shell32.NewProc("SHDoDragDrop")
 	oleInitialize                     = ole32.NewProc("OleInitialize")
 	oleUninitialize                   = ole32.NewProc("OleUninitialize")
-	bhidDataObject                    = windows.GUID{Data1: 0xb8c0bd9f, Data2: 0xed24, Data3: 0x455c, Data4: [8]byte{0x83, 0xe6, 0xd5, 0x39, 0x0c, 0x4f, 0xe8, 0xc4}}
-	iidDataObject                     = windows.GUID{Data1: 0x0000010e, Data4: [8]byte{0xc0, 0, 0, 0, 0, 0, 0, 0x46}}
+	releaseCapture                    = user32.NewProc("ReleaseCapture")
+
+	bhidDataObject = windows.GUID{Data1: 0xb8c0bd9f, Data2: 0xed24, Data3: 0x455c, Data4: [8]byte{0x83, 0xe6, 0xd5, 0x39, 0x0c, 0x4f, 0xe8, 0xc4}}
+	iidDataObject  = windows.GUID{Data1: 0x0000010e, Data4: [8]byte{0xc0, 0, 0, 0, 0, 0, 0, 0x46}}
 )
 
 // Only the IUnknown methods and the first IShellItemArray method are used.
@@ -38,12 +38,6 @@ type shellItemArray struct {
 	}
 }
 
-func dragEnded() {
-	if OnEnded != nil {
-		OnEnded()
-	}
-}
-
 func hresultError(operation string, hr uintptr) error {
 	if int32(hr) < 0 {
 		return fmt.Errorf("%s: HRESULT 0x%08X", operation, uint32(hr))
@@ -51,30 +45,31 @@ func hresultError(operation string, hr uintptr) error {
 	return nil
 }
 
-// StartPaths must run on the window's UI thread during a drag gesture. window is
-// an HWND (nil is allowed). Paths must be absolute mounted paths in one folder.
-// The Shell reads the mounted files directly; OnWrite is not used.
+// StartPaths must run on the window's UI thread during a drag gesture. window is an HWND (nil is
+// allowed). Paths must be absolute mounted paths in one folder. The Shell reads the mounted files
+// directly and builds the data object itself, so no IDataObject is implemented here.
 func StartPaths(window unsafe.Pointer, paths []string) error {
-	defer dragEnded()
+	if OnEnded != nil {
+		defer OnEnded()
+	}
 	if len(paths) == 0 {
 		return errors.New("no mounted paths to drag")
 	}
-	if uint64(len(paths)) > uint64(^uint32(0)) {
-		return errors.New("too many mounted paths to drag")
-	}
 	parent := filepath.Dir(paths[0])
-	for _, path := range paths {
-		if !filepath.IsAbs(path) {
-			return fmt.Errorf("drag path must be absolute: %q", path)
+	for _, p := range paths {
+		if !filepath.IsAbs(p) {
+			return fmt.Errorf("drag path must be absolute: %q", p)
 		}
 		// BHID_DataObject only supports flat arrays created from ID lists.
-		if !strings.EqualFold(filepath.Dir(path), parent) {
+		if !strings.EqualFold(filepath.Dir(p), parent) {
 			return errors.New("drag paths must belong to the same folder")
 		}
 	}
 
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// The drag loop needs an STA. S_FALSE means the thread already is one, which is the normal
+	// case; RPC_E_CHANGED_MODE (0x80010106) means it is an MTA and the drag cannot run there.
 	hr, _, _ := oleInitialize.Call(0)
 	if err := hresultError("OleInitialize (STA required)", hr); err != nil {
 		return err
@@ -88,14 +83,14 @@ func StartPaths(window unsafe.Pointer, paths []string) error {
 			windows.CoTaskMemFree(pidl)
 		}
 	}()
-	for i, path := range paths {
-		name, err := windows.UTF16PtrFromString(path)
+	for i, p := range paths {
+		name, err := windows.UTF16PtrFromString(p)
 		if err != nil {
-			return fmt.Errorf("invalid drag path %q: %w", path, err)
+			return fmt.Errorf("invalid drag path %q: %w", p, err)
 		}
 		hr, _, _ = shParseDisplayName.Call(uintptr(unsafe.Pointer(name)), 0, uintptr(unsafe.Pointer(&pidls[i])), 0, 0)
 		if err := hresultError("SHParseDisplayName", hr); err != nil {
-			return fmt.Errorf("parse drag path %q: %w", path, err)
+			return fmt.Errorf("parse drag path %q: %w", p, err)
 		}
 	}
 
@@ -112,6 +107,10 @@ func StartPaths(window unsafe.Pointer, paths []string) error {
 		return err
 	}
 	defer data.Vtbl.Release.Call(uintptr(unsafe.Pointer(data)))
+
+	// Capture belongs to the WebView2 child window, so the drag loop would never see the mouse.
+	// Wails releases it the same way before handing a gesture to the host window.
+	releaseCapture.Call()
 
 	var effect uint32
 	// Since Vista, a nil IDropSource asks the Shell to create the drag source.

@@ -19,11 +19,6 @@ import (
 	"soteria/internal/domain"
 )
 
-var (
-	OnWrite func(remote, dest string) error // downloads remote to dest, blocking until done
-	OnEnded func()
-)
-
 // Start must run on the main thread with an NSWindow pointer.
 func Start(window unsafe.Pointer, entries []domain.Entry) error {
 	b, _ := json.Marshal(entries)

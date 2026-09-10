@@ -40,7 +40,7 @@ func windowsDragPaths(drive domain.Drive, entries []domain.Entry) ([]string, err
 		if i == 0 {
 			parent = path.Dir(p)
 		} else if path.Dir(p) != parent {
-			return nil, errors.New("drag out on Windows requires files from the same folder")
+			return nil, errors.New("drag out on Windows supports files from one folder at a time")
 		}
 		paths = append(paths, root+strings.ReplaceAll(p[1:], "/", `\`))
 	}

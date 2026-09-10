@@ -11,6 +11,9 @@ import (
 	"soteria/internal/infra/drag"
 )
 
+// dragOut hands the Shell real paths on the mounted drive and lets it build the data object. That
+// needs the drive connected: WebView2 owns the webview's own drag, so there is no way to stream
+// the bytes out of the app itself.
 func (a *App) dragOut(entries []domain.Entry) error {
 	var drive domain.Drive
 	if a.M != nil {
