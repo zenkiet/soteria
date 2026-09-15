@@ -10,6 +10,7 @@
 		Download,
 		DownloadDir,
 		DragOut,
+		FolderUsage,
 		Indexed,
 		Link,
 		Open,
@@ -27,7 +28,8 @@
 		type Conflict,
 		type Entry,
 		type IndexStatus,
-		type Server
+		type Server,
+		type Usage
 	} from '@/shared/api';
 	import {
 		ago,
@@ -66,6 +68,7 @@
 	const server = $derived(page.data.server as Server);
 
 	let entries = $state<Entry[]>([]);
+	let usage = $state<Record<string, Usage>>({});
 	let loading = $state(true);
 	let error = $state('');
 	let query = $state('');
@@ -93,11 +96,18 @@
 	];
 	const sortLabel = $derived(SORTS.find(([k]) => k === prefs.sort)?.[1] ?? 'Name');
 
+	const entrySize = (e: Entry) =>
+		e.dir ? (usage[e.path]?.known ? usage[e.path].bytes : null) : e.size;
+	const shownSize = (e: Entry) => {
+		const n = entrySize(e);
+		return n === null ? '—' : bytes(n);
+	};
+
 	function compare(a: Entry, b: Entry) {
 		const k = prefs.sort;
 		let r =
 			k === 'size'
-				? a.size - b.size
+				? (entrySize(a) ?? -1) - (entrySize(b) ?? -1)
 				: k === 'modified'
 					? Date.parse(a.modified) - Date.parse(b.modified)
 					: k === 'created'
@@ -127,12 +137,20 @@
 	const shown = $derived(searching ? hits : rows);
 	const viewable = $derived(shown.filter((e) => !e.dir && previewKind(e.name)));
 	const picked = $derived(shown.filter((e) => sel.includes(e.path)));
-	const single = $derived(picked.length === 1 && !picked[0].dir ? picked[0] : null);
+	const single = $derived(picked.length === 1 ? picked[0] : null);
+
+	async function loadUsage(list: Entry[], d: string) {
+		const pairs = await Promise.all(
+			list.filter((e) => e.dir).map(async (e) => [e.path, await FolderUsage(e.path)] as const)
+		);
+		if (dir === d) usage = Object.fromEntries(pairs);
+	}
 
 	async function load(d: string) {
 		loading = true;
 		try {
 			entries = (await List(d)) ?? [];
+			loadUsage(entries, d);
 			error = '';
 			const f = page.url.searchParams.get('focus');
 			if (f) {
@@ -192,6 +210,7 @@
 	$effect(() =>
 		Events.On('index', (ev) => {
 			idx = ev.data;
+			loadUsage(entries, dir);
 			if (searching) Search(query).then((r) => (results = r ?? []));
 		})
 	);
@@ -370,9 +389,12 @@
 		cursor = e.path;
 		if (ev.shiftKey && anchor) {
 			const a = shown.findIndex((x) => x.path === anchor);
-			const b = shown.findIndex((x) => x.path === e.path);
-			sel = shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
-			return;
+			if (a >= 0) {
+				const b = shown.findIndex((x) => x.path === e.path);
+				sel = shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
+				return;
+			}
+			// the anchored row is gone (moved, deleted, filtered): fall through and re-anchor
 		}
 		if (ev.metaKey || ev.ctrlKey) {
 			sel = sel.includes(e.path) ? sel.filter((p) => p !== e.path) : [...sel, e.path];
@@ -463,7 +485,7 @@
 			pick(e, ev);
 			document.querySelector<HTMLElement>(`[data-path="${CSS.escape(e.path)}"]`)?.focus();
 		} else if (ev.key === ' ' && !(ev.target instanceof HTMLButtonElement)) {
-			if (single) preview = single;
+			if (single && !single.dir) preview = single;
 			else return;
 		} else if (!mod) return;
 		else if (k === 'a') sel = shown.map((e) => e.path);
@@ -554,7 +576,7 @@
 			<span class="truncate">{e.name}</span>
 		</div>
 		<div class="hidden truncate text-xs text-fg-3 @4xl:block">{kind(e)}</div>
-		<div class="text-right font-mono text-xs text-fg-2">{e.dir ? '—' : bytes(e.size)}</div>
+		<div class="text-right font-mono text-xs text-fg-2">{shownSize(e)}</div>
 		<div class="text-xs text-fg-2">{when(e.modified)}</div>
 		<div class="hidden text-xs text-fg-2 @4xl:block">{when(e.created)}</div>
 		{@render dots(e)}
@@ -761,7 +783,7 @@
 								</div>
 							</div>
 							<div class="text-right font-mono text-xs text-fg-2">
-								{e.dir ? '—' : bytes(e.size)}
+								{shownSize(e)}
 							</div>
 							<div class="text-xs text-fg-2">{when(e.modified)}</div>
 							{@render dots(e)}

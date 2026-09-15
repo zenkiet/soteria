@@ -42,6 +42,9 @@ func (a *App) SetBackground(on, notify bool) {
 		} else {
 			a.tray.SetIcon(glyph(32, color.Black)).SetDarkModeIcon(glyph(32, color.White))
 		}
+		if runtime.GOOS == "windows" {
+			a.tray.OnDoubleClick(func() { a.show("") })
+		}
 	}
 	if destroy {
 		a.tray.Destroy()
@@ -118,12 +121,14 @@ func (a *App) show(path string) {
 	if a.win == nil {
 		return
 	}
-	a.Dock.ShowAppIcon()
-	a.win.Show()
-	a.win.Focus()
-	if path != "" {
-		Events{}.Emit("nav", path)
-	}
+	go func() {
+		a.Dock.ShowAppIcon()
+		a.win.Show()
+		a.win.Focus()
+		if path != "" {
+			Events{}.Emit("nav", path)
+		}
+	}()
 }
 
 // shouldQuit asks before cancelling running transfers. Show blocks on both platforms; the

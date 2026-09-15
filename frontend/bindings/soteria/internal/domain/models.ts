@@ -89,3 +89,9 @@ export interface Update {
     "date": string;
     "url": string;
 }
+
+export interface Usage {
+    "known": boolean;
+    "items": number;
+    "bytes": number;
+}

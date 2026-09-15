@@ -116,9 +116,10 @@ func (a *App) Purge(p string) error                   { return a.Tr.Purge(p) }
 func (a *App) EmptyTrash() error                      { return a.Tr.Empty() }
 
 // search
-func (a *App) Reindex()                    { a.I.Reindex() }
-func (a *App) Indexed() domain.IndexStatus { return a.I.Status() }
-func (a *App) Recent(n int) []domain.Entry { return a.I.Recent(n) }
+func (a *App) Reindex()                            { a.I.Reindex() }
+func (a *App) Indexed() domain.IndexStatus         { return a.I.Status() }
+func (a *App) Recent(n int) []domain.Entry         { return a.I.Recent(n) }
+func (a *App) FolderUsage(dir string) domain.Usage { return a.I.Usage(dir) }
 func (a *App) Search(q string) []domain.Entry {
 	return a.I.Search(q)
 }

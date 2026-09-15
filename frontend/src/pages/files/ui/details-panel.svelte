@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Entry } from '@/shared/api';
+	import { FolderUsage, type Entry, type Usage } from '@/shared/api';
 	import {
 		bytes,
 		iconFor,
@@ -11,21 +11,47 @@
 		when
 	} from '@/shared/lib';
 	import { Icon } from '@/shared/ui';
+	import { Events } from '@wailsio/runtime';
 
 	export type Action = 'preview' | 'download' | 'copy' | 'rename' | 'move' | 'delete';
 
 	let { e, onaction, onclose }: { e: Entry; onaction: (a: Action) => void; onclose: () => void } =
 		$props();
 
-	const mode = $derived(previewKind(e.name));
+	const mode = $derived(e.dir ? null : previewKind(e.name));
 
-	const meta = $derived([
-		['Modified', when(e.modified)],
-		['Location', parent(e.path)],
-		['Size', `${e.size.toLocaleString()} bytes`],
-		['Content-Type', e.contentType || '—'],
-		['ETag', e.etag || '—']
-	]);
+	let usage = $state<Usage | null>(null);
+	let shownFor = '';
+	$effect(() => {
+		if (!e.dir) return;
+		const p = e.path;
+		if (p !== shownFor) {
+			shownFor = p;
+			usage = null;
+		}
+		const count = () => FolderUsage(p).then((u) => p === shownFor && (usage = u));
+		count();
+		return Events.On('index', count);
+	});
+
+	const size = $derived(
+		!e.dir ? bytes(e.size) : usage?.known ? `${usage.items} items · ${bytes(usage.bytes)}` : '—'
+	);
+	const meta = $derived(
+		e.dir
+			? [
+					['Modified', when(e.modified)],
+					['Location', parent(e.path)],
+					['Contains', usage?.known ? `${usage.items} items` : 'Not indexed yet']
+				]
+			: [
+					['Modified', when(e.modified)],
+					['Location', parent(e.path)],
+					['Size', `${e.size.toLocaleString()} bytes`],
+					['Content-Type', e.contentType || '—'],
+					['ETag', e.etag || '—']
+				]
+	);
 </script>
 
 <aside
@@ -42,7 +68,7 @@
 			{#if mode === 'image'}
 				<img src={previewUrl(e.path)} alt="" class="h-full w-full object-cover" />
 			{:else}
-				<Icon name={iconFor(e)} size={32} class="opacity-70" />
+				<Icon name={iconFor(e)} size={e.dir ? 56 : 32} class="opacity-70" />
 			{/if}
 		</button>
 		<button
@@ -53,7 +79,7 @@
 	</div>
 	<div>
 		<div class="text-[15px] font-semibold tracking-tight break-all">{e.name}</div>
-		<div class="mt-1 text-xs text-fg-2">{kind(e)} · {bytes(e.size)}</div>
+		<div class="mt-1 text-xs text-fg-2">{kind(e)} · {size}</div>
 	</div>
 	<button class="btn btn-primary h-9" onclick={() => onaction('download')}>
 		<Icon name="download" size={15} />Download

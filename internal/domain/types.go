@@ -64,6 +64,12 @@ type Drive struct {
 	Mounted bool   `json:"mounted"`
 }
 
+type Usage struct {
+	Known bool  `json:"known"`
+	Items int   `json:"items"`
+	Bytes int64 `json:"bytes"`
+}
+
 type IndexStatus struct {
 	Count   int   `json:"count"`
 	Folders int   `json:"folders"`

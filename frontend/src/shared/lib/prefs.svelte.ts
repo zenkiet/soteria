@@ -15,6 +15,7 @@ type Prefs = {
 	notify: boolean;
 	autoUpdate: boolean;
 	skipVersion: string;
+	reconnect: boolean;
 };
 
 const DEFAULTS: Prefs = {
@@ -31,7 +32,8 @@ const DEFAULTS: Prefs = {
 	background: true,
 	notify: true,
 	autoUpdate: true,
-	skipVersion: ''
+	skipVersion: '',
+	reconnect: true
 };
 
 function stored(): Prefs {

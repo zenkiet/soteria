@@ -1,4 +1,13 @@
 allowBuilds:
   unrs-resolver: true
 minimumReleaseAgeExclude:
-  - '@wailsio/runtime@3.0.0-beta.17'
+  - '@wailsio/runtime@3.0.0-beta.17 || 3.0.0-beta.19'
+  - jscpd-darwin-arm64@5.2.1
+  - jscpd-darwin-x64@5.2.1
+  - jscpd-linux-arm64-gnu@5.2.1
+  - jscpd-linux-arm64-musl@5.2.1
+  - jscpd-linux-x64-gnu@5.2.1
+  - jscpd-linux-x64-musl@5.2.1
+  - jscpd-windows-arm64-msvc@5.2.1
+  - jscpd-windows-x64-msvc@5.2.1
+  - jscpd@5.2.1

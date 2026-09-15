@@ -79,7 +79,7 @@
 		<img src="/bo.svg" alt="" class="h-8 w-8" />
 		{#if badge}
 			<span
-				class="absolute -right-1 -bottom-1 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-surface {badge} text-[#fff]"
+				class="absolute -right-1 -bottom-1 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-surface {badge} text-white"
 			>
 				<Icon name={mode === 'ready' ? 'check' : 'info'} size={10} />
 			</span>
@@ -88,7 +88,7 @@
 {/snippet}
 
 <Dialog open={update.open} {title} {sub} lead={bo} onclose={close}>
-	<div class="flex w-100 flex-col gap-4">
+	<div class="flex flex-col gap-4">
 		{#if mode === 'available' || busy}
 			{#if notes.length}
 				<div

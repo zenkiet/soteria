@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -91,6 +92,24 @@ func (i *Index) Recent(n int) []domain.Entry {
 		files = files[:n]
 	}
 	return files
+}
+
+func (i *Index) Usage(dir string) domain.Usage {
+	self := path.Clean("/" + dir)
+	pre := strings.TrimSuffix(self, "/") + "/"
+	var u domain.Usage
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for _, e := range i.entries {
+		switch {
+		case e.Path == self:
+			u.Known = true
+		case strings.HasPrefix(e.Path, pre):
+			u.Items++
+			u.Bytes += e.Size
+		}
+	}
+	return u
 }
 
 func (i *Index) Search(q string) []domain.Entry {

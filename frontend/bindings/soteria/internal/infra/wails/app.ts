@@ -71,6 +71,10 @@ export function EmptyTrash(): $CancellablePromise<void> {
     return $Call.ByID(2922579444);
 }
 
+export function FolderUsage(dir: string): $CancellablePromise<domain$0.Usage> {
+    return $Call.ByID(2102640720, dir);
+}
+
 export function Forget(id: string): $CancellablePromise<void> {
     return $Call.ByID(3085677516, id);
 }
@@ -88,6 +92,10 @@ export function InstallDriver(): $CancellablePromise<void> {
  */
 export function InstallUpdate(): $CancellablePromise<void> {
     return $Call.ByID(3404727425);
+}
+
+export function LaunchAtLogin(): $CancellablePromise<boolean> {
+    return $Call.ByID(3480213936);
 }
 
 export function Link(p: string): $CancellablePromise<string> {
@@ -188,6 +196,10 @@ export function Servers(): $CancellablePromise<domain$0.Server[] | null> {
  */
 export function SetBackground(on: boolean, notify: boolean): $CancellablePromise<void> {
     return $Call.ByID(2323405311, on, notify);
+}
+
+export function SetLaunchAtLogin(on: boolean): $CancellablePromise<void> {
+    return $Call.ByID(641088414, on);
 }
 
 export function SignOut(): $CancellablePromise<void> {
