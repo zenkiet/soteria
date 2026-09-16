@@ -15,8 +15,12 @@ import (
 	"soteria/internal/infra/store"
 )
 
+// notifyFirstInstance derives the mutex and message-window names from this too.
+const singleInstanceID = "dev.zenkiet.soteria"
+
 // Run wires the adapter to the use cases, builds the Wails app and window, and blocks until quit.
 func Run(a *App, assets fs.FS) error {
+	notifyFirstInstance() // may exit: hands this launch to the running instance
 	a.Dock, a.Notes = dock.New(), notifications.New()
 	a.T.OnChange = func(status, kind string) {
 		a.refreshLater()
@@ -32,12 +36,12 @@ func Run(a *App, assets fs.FS) error {
 		Description: "WebDAV client",
 		Services:    []application.Service{application.NewService(a), application.NewService(a.Dock), application.NewService(a.Notes)},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "dev.zenkiet.soteria",
+			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				if win != nil {
-					win.Show()
 					win.Restore()
 				}
+				a.show("") // not win.Show(): show() also rescues an off-screen window
 				for _, arg := range data.Args {
 					a.openLink(arg)
 				}
@@ -74,9 +78,9 @@ func Run(a *App, assets fs.FS) error {
 		opts.MinWidth = 1280
 		opts.MinHeight = 600
 	}
-	// Window geometry survives relaunches. ponytail: no off-screen check; validate against Screens if a user loses the window after unplugging a monitor.
+	// Window geometry survives relaunches, unless it points at a monitor that is gone.
 	a.state = store.LoadWindow()
-	if a.state.W > 0 {
+	if a.state.W > 0 && onScreen(wapp.Screen.GetAll(), a.state.X, a.state.Y, a.state.W) {
 		opts.X, opts.Y, opts.Width, opts.Height, opts.InitialPosition = a.state.X, a.state.Y, a.state.W, a.state.H, application.WindowXY
 	}
 	win = wapp.Window.NewWithOptions(opts)
@@ -99,6 +103,22 @@ func Run(a *App, assets fs.FS) error {
 		a.openLink(arg)
 	}
 	return wapp.Run()
+}
+
+// onScreen reports whether the window's drag strip would be grabbable on a current
+// display. Screens can be empty before the platform reports them: fail open.
+func onScreen(screens []*application.Screen, x, y, w int) bool {
+	if len(screens) == 0 {
+		return true
+	}
+	cx, cy := x+w/2, y+20
+	for _, s := range screens {
+		b := s.Bounds
+		if cx >= b.X && cx < b.X+b.Width && cy >= b.Y && cy < b.Y+b.Height {
+			return true
+		}
+	}
+	return false
 }
 
 // trackWindow writes the geometry 300 ms after the last move or resize.

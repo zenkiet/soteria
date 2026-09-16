@@ -122,6 +122,12 @@ func (a *App) show(path string) {
 		return
 	}
 	go func() {
+		// A monitor unplugged while the window hid in the tray leaves it off-screen.
+		x, y := a.win.Position()
+		w, _ := a.win.Size()
+		if !onScreen(application.Get().Screen.GetAll(), x, y, w) {
+			a.win.Center()
+		}
 		a.Dock.ShowAppIcon()
 		a.win.Show()
 		a.win.Focus()
