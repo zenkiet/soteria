@@ -40,6 +40,7 @@ type App struct {
 	rt      *time.Timer
 	rel     *updater.Release
 	blocked bool
+	auto    bool
 	link    string
 }
 

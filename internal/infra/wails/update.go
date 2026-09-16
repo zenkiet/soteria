@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
@@ -27,6 +28,42 @@ func (a *App) initUpdater(wapp *application.App) {
 		dir = filepath.Dir(exe[:i+4])
 	}
 	a.blocked = !writableDir(dir)
+	go a.updateLoop()
+}
+
+func (a *App) SetAutoUpdate(on bool) {
+	a.mu.Lock()
+	a.auto = on
+	a.mu.Unlock()
+}
+
+// updateLoop replaces a webview timer: a window hidden in the tray suspends
+func (a *App) updateLoop() {
+	for delay := 10 * time.Second; ; delay = 6 * time.Hour {
+		time.Sleep(delay)
+		a.mu.Lock()
+		on := a.auto
+		a.mu.Unlock()
+		switch application.Get().Updater.State() {
+		case updater.StateIdle, updater.StateUpToDate, updater.StateAvailable, updater.StateError:
+			if on {
+				_ = a.CheckUpdate()
+			}
+		}
+	}
+}
+
+// checkNow serves the tray item, so the outcome must not need the window.
+func (a *App) checkNow() {
+	if err := a.CheckUpdate(); err != nil {
+		a.send("Couldn't check for updates", err.Error())
+		return
+	}
+	if a.UpdateStatus().Version != "" {
+		a.show("") // the update dialog takes over
+		return
+	}
+	a.send("Soteria is up to date", "Version "+a.Version)
 }
 
 // matchAsset picks Soteria-<v>-<GOOS>-<GOARCH>.zip; the DMG and Setup.exe are for people.

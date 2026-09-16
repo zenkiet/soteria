@@ -101,8 +101,13 @@ func (a *App) trayMenu(n int) *application.Menu {
 	m.Add("Open Soteria").OnClick(func(*application.Context) { a.show("") })
 	m.AddSeparator()
 	m.Add(xfer).SetEnabled(false)
-	if application.Get().Updater.State() == updater.StateReady {
+	switch application.Get().Updater.State() {
+	case updater.StateReady:
 		m.Add("Restart to update · " + a.UpdateStatus().Version).OnClick(func(*application.Context) { _ = a.RestartToUpdate() })
+	case updater.StateAvailable:
+		m.Add("Update available · " + a.UpdateStatus().Version).OnClick(func(*application.Context) { a.show("") })
+	case updater.StateIdle, updater.StateUpToDate, updater.StateError:
+		m.Add("Check for Updates").OnClick(func(*application.Context) { a.checkNow() })
 	}
 	m.Add("Open Transfers").OnClick(func(*application.Context) { a.show("/transfers") })
 	m.AddSeparator()

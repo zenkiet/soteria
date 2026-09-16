@@ -198,6 +198,10 @@ export function Servers(): $CancellablePromise<domain$0.Server[] | null> {
     return $Call.ByID(2304319571);
 }
 
+export function SetAutoUpdate(on: boolean): $CancellablePromise<void> {
+    return $Call.ByID(3485758073, on);
+}
+
 /**
  * SetBackground mirrors the two Settings switches; the frontend calls it on start and on change.
  */

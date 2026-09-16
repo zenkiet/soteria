@@ -2,7 +2,7 @@
 	import '@/app/app.css';
 	import { goto } from '$app/navigation';
 	import { Toasts, UpdateDialog, WinLights } from '@/app/ui';
-	import { SetBackground, check, update } from '@/shared/api';
+	import { SetAutoUpdate, SetBackground } from '@/shared/api';
 	import { initTheme, prefs } from '@/shared/lib';
 	import { Events, System } from '@wailsio/runtime';
 
@@ -13,16 +13,9 @@
 		if (desktop) SetBackground(prefs.background, prefs.notify);
 	});
 	$effect(() => Events.On('nav', (e) => goto(e.data)));
-	// Update checks: 10 s after launch, then every 6 h; the dialog decides what to show.
+	// The backend owns the update-check schedule; it only needs the preference.
 	$effect(() => {
-		if (!desktop || !prefs.autoUpdate) return;
-		const run = () => update.s.state !== 'unconfigured' && check();
-		const t = setTimeout(run, 10_000);
-		const i = setInterval(run, 6 * 3_600_000);
-		return () => {
-			clearTimeout(t);
-			clearInterval(i);
-		};
+		if (desktop) SetAutoUpdate(prefs.autoUpdate);
 	});
 
 	const BUTTONS: Record<number, number> = { 3: -1, 4: 1 };

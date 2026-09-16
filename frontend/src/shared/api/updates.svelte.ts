@@ -21,6 +21,9 @@ for (const n of [
 	Updater.Events.Installing
 ])
 	Events.On(n, sync);
+// Checks run in the backend; these keep the dialog and "checked X ago" honest.
+for (const n of [Updater.Events.UpdateAvailable, Updater.Events.NoUpdate])
+	Events.On(n, () => sync().then(() => (update.checkedAt = Date.now())));
 Events.On(Updater.Events.DownloadProgress, (e) => (update.progress = e.data));
 Events.On(Updater.Events.UpdateReady, () => {
 	update.progress = null;
