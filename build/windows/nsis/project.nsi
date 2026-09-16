@@ -98,6 +98,7 @@ Section
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
+    !insertmacro CUSTOM_PROTOCOL_ASSOCIATE "soteria" "URL:Soteria" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
 
     !insertmacro wails.writeUninstaller
 SectionEnd
@@ -114,6 +115,7 @@ Section "uninstall"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
+    !insertmacro CUSTOM_PROTOCOL_UNASSOCIATE "soteria"
 
     !insertmacro wails.deleteUninstaller
 SectionEnd

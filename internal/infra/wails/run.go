@@ -2,6 +2,7 @@ package wails
 
 import (
 	"io/fs"
+	"os"
 	"runtime"
 	"time"
 
@@ -32,10 +33,13 @@ func Run(a *App, assets fs.FS) error {
 		Services:    []application.Service{application.NewService(a), application.NewService(a.Dock), application.NewService(a.Notes)},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "dev.zenkiet.soteria",
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				if win != nil {
 					win.Show()
 					win.Restore()
+				}
+				for _, arg := range data.Args {
+					a.openLink(arg)
 				}
 			},
 		},
@@ -44,6 +48,11 @@ func Run(a *App, assets fs.FS) error {
 		ShouldQuit: a.shouldQuit,
 	})
 	a.initUpdater(wapp)
+	// Deep links: macOS delivers the launch URL as an Apple Event, Windows as an argv entry
+	// (relaunches land in OnSecondInstanceLaunch above). openLink ignores anything else.
+	wapp.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		a.openLink(e.Context().URL())
+	})
 
 	opts := application.WebviewWindowOptions{
 		Title:          "Soteria",
@@ -86,6 +95,9 @@ func Run(a *App, assets fs.FS) error {
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		wapp.Event.Emit("dropped", e.Context().DroppedFiles())
 	})
+	for _, arg := range os.Args[1:] { // Windows cold start passes the URL via argv
+		a.openLink(arg)
+	}
 	return wapp.Run()
 }
 

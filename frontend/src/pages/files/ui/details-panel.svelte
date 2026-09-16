@@ -95,7 +95,7 @@
 	<div class="flex-1"></div>
 	<div class="-mx-2.5 flex flex-col gap-0.5">
 		<button class="menu-item" onclick={() => onaction('copy')}>
-			<Icon name="link" size={15} class="text-fg-2" />Copy WebDAV URL
+			<Icon name="link" size={15} class="text-fg-2" />Copy Link
 		</button>
 		<button class="menu-item" onclick={() => onaction('rename')}>
 			<Icon name="pencil" size={15} class="text-fg-2" />Rename

@@ -12,7 +12,6 @@
 		DragOut,
 		FolderUsage,
 		Indexed,
-		Link,
 		Open,
 		List,
 		Mkdir,
@@ -379,8 +378,12 @@
 	}
 
 	async function copyLink(e: Entry) {
-		await Clipboard.SetText(await Link(e.path));
-		toast('WebDAV URL copied');
+		// soteria://files/<path> mirrors the SPA route; a file links to its folder, focused.
+		const route = e.dir
+			? filesHref(e.path)
+			: filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path);
+		await Clipboard.SetText('soteria:/' + route);
+		toast('Link copied');
 		menu = null;
 	}
 
@@ -995,7 +998,7 @@
 					<Icon name="pencil" size={15} class="text-fg-2" />Rename
 				</button>
 				<button class="menu-item" onclick={() => copyLink(one)}>
-					<Icon name="link" size={15} class="text-fg-2" />Copy WebDAV URL
+					<Icon name="link" size={15} class="text-fg-2" />Copy Link
 				</button>
 			{:else}
 				<button class="menu-item" onclick={() => downloadAll(m.items)}>

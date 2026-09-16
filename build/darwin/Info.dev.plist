@@ -16,6 +16,17 @@
 		<string>Soteria</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLName</key>
+				<string>dev.zenkiet.soteria</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>soteria</string>
+				</array>
+			</dict>
+		</array>
 		<key>CFBundleShortVersionString</key>
 		<string>0.3.0</string>
 		<key>CFBundleVersion</key>

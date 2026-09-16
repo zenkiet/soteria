@@ -40,6 +40,7 @@ type App struct {
 	rt      *time.Timer
 	rel     *updater.Release
 	blocked bool
+	link    string
 }
 
 // Events sends to the webview; app packages only see the interface.

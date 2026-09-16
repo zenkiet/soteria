@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ConnectSaved, Forget, Servers, type Server } from '@/shared/api';
+	import { ConnectSaved, DeepLink, Forget, Servers, type Server } from '@/shared/api';
 	import { msg, prefs, reveal, toast } from '@/shared/lib';
 	import { Icon } from '@/shared/ui';
 	import { System } from '@wailsio/runtime';
@@ -26,7 +26,7 @@
 		busy = s.id;
 		try {
 			await ConnectSaved(s.id);
-			if (page.route.id === '/') await goto('/files');
+			if (page.route.id === '/') await goto((await DeepLink()) || '/files');
 		} catch (e) {
 			if (!msg(e).includes('password required')) toast(msg(e), 'error');
 		}
@@ -37,7 +37,7 @@
 		busy = s.id;
 		try {
 			await ConnectSaved(s.id);
-			await goto('/files');
+			await goto((await DeepLink()) || '/files');
 		} catch (e) {
 			if (msg(e).includes('password required')) await goto(`/sign-in?id=${s.id}`);
 			else toast(msg(e), 'error');

@@ -41,6 +41,13 @@ export function Current(): $CancellablePromise<domain$0.Server | null> {
     return $Call.ByID(1217412538);
 }
 
+/**
+ * DeepLink hands the parked route to the frontend once.
+ */
+export function DeepLink(): $CancellablePromise<string> {
+    return $Call.ByID(3858473219);
+}
+
 export function Disconnect(): $CancellablePromise<void> {
     return $Call.ByID(2705595211);
 }
