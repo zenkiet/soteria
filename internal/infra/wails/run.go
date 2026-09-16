@@ -78,10 +78,10 @@ func Run(a *App, assets fs.FS) error {
 		opts.MinWidth = 1280
 		opts.MinHeight = 600
 	}
-	// Window geometry survives relaunches, unless it points at a monitor that is gone.
+	// Deliberately no saved position: a spot on a lost monitor strands the window off-screen.
 	a.state = store.LoadWindow()
-	if a.state.W > 0 && onScreen(wapp.Screen.GetAll(), a.state.X, a.state.Y, a.state.W) {
-		opts.X, opts.Y, opts.Width, opts.Height, opts.InitialPosition = a.state.X, a.state.Y, a.state.W, a.state.H, application.WindowXY
+	if a.state.W > 0 {
+		opts.Width, opts.Height = a.state.W, a.state.H
 	}
 	win = wapp.Window.NewWithOptions(opts)
 	a.win = win
@@ -121,10 +121,10 @@ func onScreen(screens []*application.Screen, x, y, w int) bool {
 	return false
 }
 
-// trackWindow writes the geometry 300 ms after the last move or resize.
+// trackWindow writes the size 300 ms after the last resize.
 func (a *App) trackWindow(w *application.WebviewWindow) {
 	var t *time.Timer
-	save := func(*application.WindowEvent) {
+	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {
 		if t != nil {
 			t.Stop()
 		}
@@ -132,11 +132,8 @@ func (a *App) trackWindow(w *application.WebviewWindow) {
 			if w.IsMaximised() {
 				return
 			}
-			a.state.X, a.state.Y = w.Position()
 			a.state.W, a.state.H = w.Size()
 			store.SaveWindow(a.state)
 		})
-	}
-	w.OnWindowEvent(events.Common.WindowDidMove, save)
-	w.OnWindowEvent(events.Common.WindowDidResize, save)
+	})
 }

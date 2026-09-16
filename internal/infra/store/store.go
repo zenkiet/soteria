@@ -76,8 +76,8 @@ func FindServer(id string) (domain.Server, bool) {
 
 // WindowState survives relaunches in <config>/window.json.
 type WindowState struct {
-	X, Y, W, H int
-	Hinted     bool // "still running" notification already shown once
+	W, H   int
+	Hinted bool // "still running" notification already shown once
 }
 
 func windowFile() string { return filepath.Join(Dir(), "window.json") }

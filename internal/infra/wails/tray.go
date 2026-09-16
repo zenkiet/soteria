@@ -131,6 +131,10 @@ func (a *App) show(path string) {
 		a.Dock.ShowAppIcon()
 		a.win.Show()
 		a.win.Focus()
+		// Windows may refuse SetForegroundWindow from an unfocused process;
+		// pulsing topmost raises the window anyway without it staying on top.
+		a.win.SetAlwaysOnTop(true)
+		a.win.SetAlwaysOnTop(false)
 		if path != "" {
 			Events{}.Emit("nav", path)
 		}
