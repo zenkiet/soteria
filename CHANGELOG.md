@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.5.0](https://github.com/zenkiet/soteria/compare/7c5906ec929a9efbddcdedcada470895ecc9d689..v0.5.0) - 2026-09-16
+#### 🚀 Features
+- ✨ implement check for update for tray - ([49df17d](https://github.com/zenkiet/soteria/commit/49df17d4c8173057fe4284e5eb35e25662020130)) - [@zenkiet](https://github.com/zenkiet)
+#### 🐛 Bug Fixes
+- 🐛 update topmost for window - ([7c5906e](https://github.com/zenkiet/soteria/commit/7c5906ec929a9efbddcdedcada470895ecc9d689)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.4.1](https://github.com/zenkiet/soteria/compare/72253e915fde48f3467fa2f192aa1b2bb6338a58..v0.4.1) - 2026-09-16
 #### 🐛 Bug Fixes
 - 🐛 handle second instance in window - ([72253e9](https://github.com/zenkiet/soteria/commit/72253e915fde48f3467fa2f192aa1b2bb6338a58)) - [@zenkiet](https://github.com/zenkiet)
