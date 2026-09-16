@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.4.1](https://github.com/zenkiet/soteria/compare/72253e915fde48f3467fa2f192aa1b2bb6338a58..v0.4.1) - 2026-09-16
+#### 🐛 Bug Fixes
+- 🐛 handle second instance in window - ([72253e9](https://github.com/zenkiet/soteria/commit/72253e915fde48f3467fa2f192aa1b2bb6338a58)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.4.0](https://github.com/zenkiet/soteria/compare/e090de96bc9ccc0ecd57686db63a41e412309dbf..v0.4.0) - 2026-09-16
 #### 🚀 Features
 - (**core**) ✨ implement deep link feature - ([e090de9](https://github.com/zenkiet/soteria/commit/e090de96bc9ccc0ecd57686db63a41e412309dbf)) - [@zenkiet](https://github.com/zenkiet)
