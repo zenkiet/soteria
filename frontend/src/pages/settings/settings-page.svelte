@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { Browser } from '@wailsio/runtime';
 	import {
 		Drive,
 		LogPath,
@@ -17,10 +18,21 @@
 		type DriveInfo,
 		type QuotaInfo,
 		type Server
-	} from '@/shared/api';
-	import { ago, bytes, msg, prefs, setPrefs, setTheme, theme, type Theme } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
-	import { Browser, System } from '@wailsio/runtime';
+	} from '#/shared/api/index.ts';
+	import {
+		ago,
+		bytes,
+		desktop,
+		fileManager,
+		msg,
+		prefs,
+		setPrefs,
+		setTheme,
+		theme,
+		windows,
+		type Theme
+	} from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	let { server }: { server: Server } = $props();
 
@@ -48,14 +60,13 @@
 		} catch (e) {
 			loginError = msg(e);
 		}
-		atLogin = await LaunchAtLogin(); // the OS is the truth, not what was clicked
+		// The OS is the truth, not what was clicked.
+		atLogin = await LaunchAtLogin();
 	}
 
 	let logPath = $state('');
 	LogPath().then((p) => (logPath = p));
-	const desktop = System.IsMac() || System.IsWindows();
-	const where = System.IsWindows() ? 'File Explorer' : 'Finder';
-	const bar = System.IsWindows() ? 'system tray' : 'menu bar';
+	const bar = windows ? 'system tray' : 'menu bar';
 	let info = $state<DriveInfo | null>(null);
 	let busy = $state(false);
 	let driveError = $state('');
@@ -204,7 +215,7 @@
 {#snippet drive()}
 	<label class="flex items-center justify-between gap-6">
 		<span class="flex flex-col gap-0.5">
-			<span>Show Soteria in {where}</span>
+			<span>Show Soteria in {fileManager}</span>
 			<span class="flex items-center gap-1.5 text-xs {status.cls}">
 				<span class="h-1.5 w-1.5 rounded-full {status.dot}"></span>{status.text}
 			</span>
@@ -234,7 +245,7 @@
 		{#if info?.mounted}
 			{@const path = info.path}
 			<button class="btn" onclick={() => Open(path)}
-				><Icon name="open" size={15} />Show in {where}</button
+				><Icon name="open" size={15} />Show in {fileManager}</button
 			>
 		{/if}
 		{#if driveError}
@@ -370,9 +381,7 @@
 			<span class="text-fg-2">{bytes(quota.used)} of {bytes(total)} used</span>
 			<span class="font-mono text-fg-3">{bytes(quota.available)} free</span>
 		</div>
-		<div class="h-2 overflow-hidden rounded-full bg-surface-2">
-			<div class="h-full rounded-full bg-accent" style="width:{(quota.used / total) * 100}%"></div>
-		</div>
+		<progress class="bar h-2" value={quota.used} max={total}></progress>
 	{:else if quota && quota.used >= 0}
 		<p class="text-xs text-fg-2">{bytes(quota.used)} used · no limit set</p>
 	{:else}
@@ -380,10 +389,7 @@
 	{/if}
 {/snippet}
 
-<header
-	class="flex h-13 shrink-0 items-center border-b border-line px-5"
-	style="--wails-draggable: drag"
->
+<header class="page-header">
 	<h1 class="text-[15px] font-semibold tracking-tight">Settings</h1>
 </header>
 
@@ -391,7 +397,7 @@
 	<div class="max-w-full divide-y divide-line">
 		{@render section('Account', 'The server this window is signed in to', account)}
 		{#if desktop}
-			{@render section('Network drive', `Shows this server in ${where} as a drive`, drive)}
+			{@render section('Network drive', `Shows this server in ${fileManager} as a drive`, drive)}
 		{/if}
 		{#if desktop}
 			{@render section('Startup', 'What happens when you log in.', startup)}

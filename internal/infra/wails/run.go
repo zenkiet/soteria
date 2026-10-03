@@ -2,6 +2,7 @@ package wails
 
 import (
 	"io/fs"
+	"log/slog"
 	"os"
 	"runtime"
 	"time"
@@ -19,8 +20,9 @@ import (
 const singleInstanceID = "dev.zenkiet.soteria"
 
 // Run wires the adapter to the use cases, builds the Wails app and window, and blocks until quit.
-func Run(a *App, assets fs.FS) error {
-	notifyFirstInstance() // may exit: hands this launch to the running instance
+func Run(a *App, assets fs.FS, logger *slog.Logger) error {
+	// May exit: hands this launch to the running instance.
+	notifyFirstInstance()
 	a.Dock, a.Notes = dock.New(), notifications.New()
 	a.T.OnChange = func(status, kind string) {
 		a.refreshLater()
@@ -34,6 +36,7 @@ func Run(a *App, assets fs.FS) error {
 	wapp := application.New(application.Options{
 		Name:        "Soteria",
 		Description: "WebDAV client",
+		Logger:      logger,
 		Services:    []application.Service{application.NewService(a), application.NewService(a.Dock), application.NewService(a.Notes)},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: singleInstanceID,
@@ -41,7 +44,8 @@ func Run(a *App, assets fs.FS) error {
 				if win != nil {
 					win.Restore()
 				}
-				a.show("") // not win.Show(): show() also rescues an off-screen window
+				// Not win.Show(): show() also rescues an off-screen window.
+				a.show("")
 				for _, arg := range data.Args {
 					a.openLink(arg)
 				}
@@ -52,8 +56,7 @@ func Run(a *App, assets fs.FS) error {
 		ShouldQuit: a.shouldQuit,
 	})
 	a.initUpdater(wapp)
-	// Deep links: macOS delivers the launch URL as an Apple Event, Windows as an argv entry
-	// (relaunches land in OnSecondInstanceLaunch above). openLink ignores anything else.
+	// macOS delivers the launch URL as an Apple Event; Windows passes it in argv (below) or to OnSecondInstanceLaunch.
 	wapp.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
 		a.openLink(e.Context().URL())
 	})
@@ -73,6 +76,11 @@ func Run(a *App, assets fs.FS) error {
 		},
 		BackgroundColour: application.NewRGB(246, 245, 241),
 		URL:              "/",
+	}
+	if runtime.GOOS == "windows" {
+		// Mica on Windows 11 (blur on 10) shows through wherever the page leaves its background transparent.
+		opts.BackgroundType = application.BackgroundTypeTranslucent
+		opts.Windows.BackdropType = application.Mica
 	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		opts.MinWidth = 1280
@@ -95,18 +103,21 @@ func Run(a *App, assets fs.FS) error {
 			a.hint()
 		}
 	})
-	a.Notes.OnNotificationResponse(func(notifications.NotificationResult) { a.show("") })
+	a.Notes.OnNotificationResponse(a.respond)
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
-		wapp.Event.Emit("dropped", e.Context().DroppedFiles())
+		d := Drop{Files: e.Context().DroppedFiles()}
+		if t := e.Context().DropTargetDetails(); t != nil {
+			d.Dir = t.Attributes["data-path"]
+		}
+		wapp.Event.Emit("dropped", d)
 	})
-	for _, arg := range os.Args[1:] { // Windows cold start passes the URL via argv
+	for _, arg := range os.Args[1:] {
 		a.openLink(arg)
 	}
 	return wapp.Run()
 }
 
-// onScreen reports whether the window's drag strip would be grabbable on a current
-// display. Screens can be empty before the platform reports them: fail open.
+// Screens can be empty before the platform reports them, so this fails open.
 func onScreen(screens []*application.Screen, x, y, w int) bool {
 	if len(screens) == 0 {
 		return true
@@ -121,7 +132,6 @@ func onScreen(screens []*application.Screen, x, y, w int) bool {
 	return false
 }
 
-// trackWindow writes the size 300 ms after the last resize.
 func (a *App) trackWindow(w *application.WebviewWindow) {
 	var t *time.Timer
 	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {

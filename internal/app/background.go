@@ -5,15 +5,15 @@ import (
 	"sync"
 )
 
-// Background is the "keep running when the window closes" policy: the two switches, the quit guard,
-// and the tally that becomes one notification when a queue finishes.
+// Background is the keep-running-when-closed policy: its switches, the quit guard and the finished-queue tally.
 type Background struct {
 	mu     sync.Mutex
 	on     bool
 	notify bool
 	force  bool
-	batch  map[string]int // done uploads / downloads / errors since the queue last drained
-	T      *Transfers
+	// batch counts done uploads, done downloads and errors since the queue last drained.
+	batch map[string]int
+	T     *Transfers
 }
 
 func NewBackground(t *Transfers) *Background { return &Background{batch: map[string]int{}, T: t} }

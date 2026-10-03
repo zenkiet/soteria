@@ -2,12 +2,14 @@ package wails
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"math"
 	"runtime"
+	"slices"
 	"strconv"
 	"time"
 
@@ -16,12 +18,11 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater"
 
 	"soteria/internal/app"
+	"soteria/internal/domain"
+	"soteria/internal/infra/awake"
 	"soteria/internal/infra/shell"
 	"soteria/internal/infra/store"
 )
-
-// Background mode: closing hides the window, the app lives in the menu bar / tray,
-// the Dock badge counts running transfers, one notification per finished queue.
 
 func where() string {
 	if runtime.GOOS == "windows" {
@@ -68,6 +69,7 @@ func (a *App) refreshLater() {
 
 func (a *App) refresh() {
 	n := a.T.Running()
+	awake.Hold(n > 0)
 	a.mu.Lock()
 	tray := a.tray
 	a.mu.Unlock()
@@ -136,8 +138,7 @@ func (a *App) show(path string) {
 		a.Dock.ShowAppIcon()
 		a.win.Show()
 		a.win.Focus()
-		// Windows may refuse SetForegroundWindow from an unfocused process;
-		// pulsing topmost raises the window anyway without it staying on top.
+		// Windows may refuse SetForegroundWindow from an unfocused process; pulsing topmost raises it anyway.
 		a.win.SetAlwaysOnTop(true)
 		a.win.SetAlwaysOnTop(false)
 		if path != "" {
@@ -146,8 +147,7 @@ func (a *App) show(path string) {
 	}()
 }
 
-// shouldQuit asks before cancelling running transfers. Show blocks on both platforms; the
-// OnClick fallback covers a non-blocking dialog too.
+// Show blocks on both platforms; the OnClick fallback covers a non-blocking dialog too.
 func (a *App) shouldQuit() bool {
 	if a.Bg.CanQuit() {
 		return true
@@ -165,16 +165,50 @@ func (a *App) shouldQuit() bool {
 	return a.Bg.CanQuit()
 }
 
-// finished notifies once per drained queue, only when the window isn't in front.
+// The drained-queue notice gets one button: Retry while anything failed, else Show in Finder for the newest download.
 func (a *App) finished(status, kind string) {
 	title, body, ok := a.Bg.Finished(status, kind)
 	if !ok || a.win == nil || (a.win.IsVisible() && a.win.IsFocused()) {
 		return
 	}
-	a.send(title, body)
+	n := notifications.NotificationOptions{Title: title, Body: body}
+	ts := a.T.List()
+	if slices.ContainsFunc(ts, func(t domain.Transfer) bool { return t.Status == "error" }) {
+		a.post(n, notifications.NotificationAction{ID: "retry", Title: "Retry"})
+		return
+	}
+	for _, t := range slices.Backward(ts) {
+		if t.Kind == "download" && t.Status == "done" {
+			n.Data = map[string]any{"path": t.Local}
+			a.post(n, notifications.NotificationAction{ID: "reveal", Title: "Show in " + where()})
+			return
+		}
+	}
+	a.post(n)
+}
+
+func (a *App) respond(r notifications.NotificationResult) {
+	switch r.Response.ActionIdentifier {
+	case "retry":
+		for _, t := range a.T.List() {
+			if t.Status == "error" {
+				_ = a.T.Retry(t.ID)
+			}
+		}
+	case "reveal":
+		if p, ok := r.Response.UserInfo["path"].(string); ok {
+			_ = shell.Reveal(p)
+		}
+	default:
+		a.show("")
+	}
 }
 
 func (a *App) send(title, body string) {
+	a.post(notifications.NotificationOptions{Title: title, Body: body})
+}
+
+func (a *App) post(n notifications.NotificationOptions, actions ...notifications.NotificationAction) {
 	if a.Notes == nil {
 		return
 	}
@@ -183,10 +217,17 @@ func (a *App) send(title, body string) {
 			return
 		}
 	}
-	_ = a.Notes.SendNotification(notifications.NotificationOptions{ID: strconv.FormatInt(time.Now().UnixNano(), 36), Title: title, Body: body})
+	n.ID = rand.Text()
+	if len(actions) == 0 {
+		_ = a.Notes.SendNotification(n)
+		return
+	}
+	n.CategoryID = actions[0].ID
+	_ = a.Notes.RegisterNotificationCategory(notifications.NotificationCategory{ID: n.CategoryID, Actions: actions})
+	_ = a.Notes.SendNotificationWithActions(n)
 }
 
-// hint tells the user once that closing didn't quit.
+// hint says once that closing the window didn't quit.
 func (a *App) hint() {
 	if a.state.Hinted {
 		return
@@ -200,10 +241,11 @@ func (a *App) hint() {
 	a.send("Soteria is still running", "Find it in the "+bar+". Change this in Settings.")
 }
 
-// glyph draws the monochrome Bo mark (folder outline, ears, eyes) as a PNG: no asset pipeline needed.
+// glyph draws the Bo mark in code, so the tray needs no asset pipeline.
 func glyph(size int, c color.Color) []byte {
 	f := float64(size)
-	box := func(x, y float64) float64 { // signed distance to the rounded body
+	// box is the signed distance to the rounded body.
+	box := func(x, y float64) float64 {
 		dx, dy := math.Abs(x-0.5)-0.33, math.Abs(y-0.55)-0.30
 		return math.Hypot(math.Max(dx, 0), math.Max(dy, 0)) + math.Min(math.Max(dx, dy), 0) - 0.09
 	}
@@ -213,10 +255,10 @@ func glyph(size int, c color.Color) []byte {
 	}
 	r, g, b, _ := c.RGBA()
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
-	for py := 0; py < size; py++ {
-		for px := 0; px < size; px++ {
+	for py := range size {
+		for px := range size {
 			n := 0
-			for s := 0; s < 16; s++ {
+			for s := range 16 {
 				if ink((float64(px)+(float64(s%4)+0.5)/4)/f, (float64(py)+(float64(s/4)+0.5)/4)/f) {
 					n++
 				}

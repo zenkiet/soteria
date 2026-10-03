@@ -12,25 +12,23 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Wails' second-instance notify uses FindWindow, which cannot see message-only
-// windows (HWND_MESSAGE children), so relaunches exited without waking the app.
-// Find the window properly and send the WM_COPYDATA payload Wails expects.
-// Delete once wails' single_instance_windows.go is fixed upstream.
-
 var (
 	user32si            = windows.NewLazySystemDLL("user32.dll")
 	pFindWindowEx       = user32si.NewProc("FindWindowExW")
 	pSendMessageTimeout = user32si.NewProc("SendMessageTimeoutW")
 )
 
+// Wails' FindWindow can't see message-only windows, so relaunches never woke the app; delete once fixed upstream.
 func notifyFirstInstance() {
 	if os.Getenv("WAILS_UPDATER_HELPER") == "1" {
-		return // the updater helper must reach application.New to swap the binary
+		// The updater helper must reach application.New to swap the binary.
+		return
 	}
 	id := "wails-app-" + singleInstanceID
 	cls, _ := windows.UTF16PtrFromString(id + "-sic")
 	name, _ := windows.UTF16PtrFromString(id + "-siw")
-	const hwndMessage = ^uintptr(2) // HWND_MESSAGE (-3)
+	// HWND_MESSAGE is (HWND)-3.
+	const hwndMessage = ^uintptr(2)
 	hwnd, _, _ := pFindWindowEx.Call(hwndMessage, 0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(name)))
 	if hwnd == 0 {
 		return
@@ -51,7 +49,7 @@ func notifyFirstInstance() {
 	}
 	const wmCopyData, smtoAbortIfHung = 0x004A, 0x0002
 	var res uintptr
-	// Timeout so a hung first instance can't strand this process as a zombie; exit either way.
+	// The timeout keeps a hung first instance from stranding this process.
 	_, _, _ = pSendMessageTimeout.Call(hwnd, wmCopyData, 0, uintptr(unsafe.Pointer(&cds)), smtoAbortIfHung, 5000, uintptr(unsafe.Pointer(&res)))
 	os.Exit(0)
 }

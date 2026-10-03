@@ -20,7 +20,8 @@ import (
 )
 
 var (
-	OnWrite func(remote, dest string) error // downloads remote to dest, blocking until done
+	// OnWrite downloads remote to dest and must block until done.
+	OnWrite func(remote, dest string) error
 	OnEnded func()
 )
 

@@ -37,7 +37,7 @@ func (a *App) SetAutoUpdate(on bool) {
 	a.mu.Unlock()
 }
 
-// updateLoop replaces a webview timer: a window hidden in the tray suspends
+// updateLoop polls from Go because webview timers stop while the window hides in the tray.
 func (a *App) updateLoop() {
 	for delay := 10 * time.Second; ; delay = 6 * time.Hour {
 		time.Sleep(delay)
@@ -60,7 +60,8 @@ func (a *App) checkNow() {
 		return
 	}
 	if a.UpdateStatus().Version != "" {
-		a.show("") // the update dialog takes over
+		// The update dialog takes over from here.
+		a.show("")
 		return
 	}
 	a.send("Soteria is up to date", "Version "+a.Version)

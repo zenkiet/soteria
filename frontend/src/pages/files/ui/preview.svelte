@@ -1,7 +1,8 @@
 <script lang="ts">
-	import type { Entry } from '@/shared/api';
-	import { bytes, kind, parent, pop, previewKind, previewUrl } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
+	import { Browser } from '@wailsio/runtime';
+	import type { Entry } from '#/shared/api/index.ts';
+	import { bytes, kind, parent, previewKind, previewUrl } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	let {
 		e,
@@ -27,33 +28,49 @@
 	}
 
 	function onkeydown(ev: KeyboardEvent) {
-		if (ev.key === 'Escape') onclose();
-		else if (ev.key === 'ArrowLeft') go(-1);
+		if (ev.key === 'ArrowLeft') go(-1);
 		else if (ev.key === 'ArrowRight') go(1);
 	}
 
+	// Only the first MiB: a multi-gigabyte log would otherwise hang the webview.
 	async function text(u: string) {
-		return (await fetch(u)).text();
+		const r = await fetch(u, { headers: { Range: 'bytes=0-1048575' } });
+		const t = await r.text();
+		return Number(r.headers.get('Content-Range')?.split('/')[1]) > 1 << 20 ? t + '\n…' : t;
 	}
 
+	// The document is untrusted and this page holds the Wails bridge: only web and mail links survive.
 	async function docx(u: string) {
 		const [{ default: mammoth }, arrayBuffer] = await Promise.all([
 			import('mammoth'),
 			fetch(u).then((r) => r.arrayBuffer())
 		]);
-		return (await mammoth.convertToHtml({ arrayBuffer })).value;
+		const { value } = await mammoth.convertToHtml({ arrayBuffer });
+		const doc = new DOMParser().parseFromString(value, 'text/html');
+		for (const a of doc.querySelectorAll('a[href]'))
+			if (!/^(https?|mailto):/i.test(a.getAttribute('href')!)) a.removeAttribute('href');
+		return doc.body.innerHTML;
+	}
+
+	function onclick(ev: MouseEvent) {
+		const a = (ev.target as Element).closest<HTMLAnchorElement>('.doc a[href]');
+		if (!a) return;
+		ev.preventDefault();
+		Browser.OpenURL(a.href);
 	}
 
 	const content = $derived(mode === 'text' ? text(url) : mode === 'docx' ? docx(url) : null);
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onclick} />
 
-<div class="fixed inset-0 z-20 flex flex-col bg-bg" use:pop>
-	<header
-		class="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-surface pr-5 pl-21"
-		style="--wails-draggable: drag"
-	>
+<dialog
+	class="m-0 h-full max-h-none w-full max-w-none flex-col bg-bg p-0 text-fg open:flex"
+	aria-label={e.name}
+	{onclose}
+	{@attach (d) => d.showModal()}
+>
+	<header class="page-header bg-surface pr-5 pl-21">
 		<div class="min-w-0 flex-1">
 			<div class="truncate font-medium">{e.name}</div>
 			<div class="truncate text-xs text-fg-3">{parent(e.path)} · {kind(e)} · {bytes(e.size)}</div>
@@ -120,4 +137,4 @@
 			{/if}
 		{/key}
 	</div>
-</div>
+</dialog>

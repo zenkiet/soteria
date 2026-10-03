@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Connect, Servers, type Server } from '@/shared/api';
-	import { msg } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
-	import { System } from '@wailsio/runtime';
+	import { Connect, Servers, type Server } from '#/shared/api/index.ts';
+	import { mac, msg, windows } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	let s = $state<Server>({
 		id: '',
@@ -97,9 +96,9 @@
 					<input type="checkbox" bind:checked={s.remember} class="mt-0.5 accent-primary" />
 					<span
 						><span class="block">Remember me</span><span class="hint"
-							>{System.IsMac()
+							>{mac
 								? 'Saved to the macOS Keychain.'
-								: System.IsWindows()
+								: windows
 									? 'Saved encrypted for your Windows account.'
 									: 'Not available on this platform yet.'}</span
 						></span

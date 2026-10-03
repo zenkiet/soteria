@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source('..');
 @import '@fontsource-variable/montserrat';
 
 @theme inline {
@@ -28,57 +28,36 @@
 }
 
 :root {
-	color-scheme: light;
-	--bg: #f6f5f1;
-	--surface: #ffffff;
-	--surface-2: #efeee9;
-	--line: #e6e4de;
-	--line-2: #d8d5cd;
-	--fg: #1b1a17;
-	--fg-2: #6e6a62;
-	--fg-3: #9b978e;
-	--primary: #171614;
-	--on-primary: #ffffff;
-	--accent: #2e64c8;
-	--accent-soft: #e4ecfa;
-	--accent-fg: #1f4f9e;
-	--ok: #3b7a45;
-	--ok-soft: #e6f1e7;
-	--warn: #956400;
-	--warn-soft: #fbf3db;
-	--danger: #b3362f;
-	--danger-soft: #fbe9e7;
-	--on-danger: #ffffff;
-	--folder-a: #dce7f8;
-	--folder-b: #c6d8f4;
-	--folder-line: #3f6bb8;
+	color-scheme: light dark;
+	--bg: light-dark(#f6f5f1, #151412);
+	--surface: light-dark(#ffffff, #1c1b18);
+	--surface-2: light-dark(#efeee9, #252420);
+	--line: light-dark(#e6e4de, #2c2b26);
+	--line-2: light-dark(#d8d5cd, #3a3832);
+	--fg: light-dark(#1b1a17, #eceae4);
+	--fg-2: light-dark(#6e6a62, #a19d94);
+	--fg-3: light-dark(#9b978e, #726f67);
+	--primary: light-dark(#171614, #eceae4);
+	--on-primary: light-dark(#ffffff, #151412);
+	--accent: light-dark(#2e64c8, #6f9be8);
+	--accent-soft: light-dark(#e4ecfa, #1f2e4a);
+	--accent-fg: light-dark(#1f4f9e, #a9c4f2);
+	--ok: light-dark(#3b7a45, #7fc48a);
+	--ok-soft: light-dark(#e6f1e7, #1d3122);
+	--warn: light-dark(#956400, #e0b25a);
+	--warn-soft: light-dark(#fbf3db, #382e16);
+	--danger: light-dark(#b3362f, #e27a72);
+	--danger-soft: light-dark(#fbe9e7, #3a201e);
+	--on-danger: light-dark(#ffffff, #1a0f0e);
+	--folder-a: light-dark(#dce7f8, #25355a);
+	--folder-b: light-dark(#c6d8f4, #2f457a);
+	--folder-line: light-dark(#3f6bb8, #7fa3e6);
 }
-
+:root[data-theme='light'] {
+	color-scheme: light;
+}
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--bg: #151412;
-	--surface: #1c1b18;
-	--surface-2: #252420;
-	--line: #2c2b26;
-	--line-2: #3a3832;
-	--fg: #eceae4;
-	--fg-2: #a19d94;
-	--fg-3: #726f67;
-	--primary: #eceae4;
-	--on-primary: #151412;
-	--accent: #6f9be8;
-	--accent-soft: #1f2e4a;
-	--accent-fg: #a9c4f2;
-	--ok: #7fc48a;
-	--ok-soft: #1d3122;
-	--warn: #e0b25a;
-	--warn-soft: #382e16;
-	--danger: #e27a72;
-	--danger-soft: #3a201e;
-	--on-danger: #1a0f0e;
-	--folder-a: #25355a;
-	--folder-b: #2f457a;
-	--folder-line: #7fa3e6;
 }
 
 @layer base {
@@ -110,11 +89,48 @@
 		content: attr(data-drop-label);
 		@apply absolute inset-3 z-10 grid place-content-center rounded-[10px] border-2 border-dashed border-accent bg-surface/90 text-[15px] font-semibold;
 	}
+	[data-path].file-drop-target-active {
+		@apply bg-accent-soft ring-2 ring-accent;
+	}
+	[data-path].file-drop-target-active::after {
+		content: none;
+	}
 }
 
 @keyframes appear {
 	from {
 		opacity: 0;
+	}
+}
+@keyframes rise {
+	from {
+		opacity: 0;
+		translate: 0 8px;
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.pop,
+	.slide-in,
+	dialog[open] {
+		transition:
+			opacity 0.18s ease-out,
+			scale 0.18s ease-out,
+			translate 0.18s ease-out;
+		@starting-style {
+			opacity: 0;
+			scale: 0.97;
+			translate: 0 4px;
+		}
+	}
+	.slide-in {
+		@starting-style {
+			translate: 16px 0;
+		}
+	}
+	/* Capped: staggering every row of a large folder kept rows blank for seconds. */
+	.reveal > :nth-child(-n + 24) {
+		animation: rise 0.3s ease-out backwards;
+		animation-delay: calc(min(sibling-index(), 12) * 30ms);
 	}
 }
 @layer components {
@@ -182,6 +198,22 @@
 	.nav-item.active {
 		@apply border-line bg-surface font-medium text-fg;
 	}
+	.page-header {
+		@apply flex h-13 shrink-0 items-center gap-3 border-b border-line px-5;
+		--wails-draggable: drag;
+	}
+	.bar {
+		@apply block w-full appearance-none overflow-hidden rounded-full border-0 bg-surface-2;
+	}
+	.bar::-webkit-progress-bar {
+		background: transparent;
+	}
+	.bar::-webkit-progress-value {
+		@apply rounded-full bg-accent;
+	}
+	.bar.warn::-webkit-progress-value {
+		@apply bg-warn;
+	}
 	.menu {
 		@apply w-56 rounded-lg border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)];
 	}
@@ -240,10 +272,24 @@
 .doc a {
 	@apply text-accent-fg underline;
 }
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation: none;
+	}
+}
 /* Unlayered on purpose: these must beat utilities like px-5 and flex. */
 .sidebar.gone {
 	display: none;
 }
 main[data-sidebar='hidden'] > header {
 	padding-left: calc(var(--lead) + 2.5rem);
+}
+/* Mica follows the system theme, so it shows through the sidebar only while the app does too. */
+:root[data-os='windows']:not([data-theme]) {
+	body,
+	.sidebar {
+		background: transparent;
+	}
 }

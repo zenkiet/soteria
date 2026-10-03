@@ -4,6 +4,7 @@
 	import type { Snippet } from 'svelte';
 	import {
 		Disconnect,
+		indexStatus,
 		List,
 		Mount,
 		Ping,
@@ -14,21 +15,24 @@
 		type Entry,
 		type QuotaInfo,
 		type Server
-	} from '@/shared/api';
-	import { bytes, filesHref, net, pop, prefs, setPrefs } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
-	import { Events, System } from '@wailsio/runtime';
+	} from '#/shared/api/index.ts';
+	import { bytes, desktop, filesHref, net, prefs, setPrefs } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 	import DriveIntro from './drive-intro.svelte';
 	import UploadPanel from './upload-panel.svelte';
 
 	let { server, children }: { server: Server; children: Snippet } = $props();
 
-	let folders = $state<Entry[]>([]);
+	let folders = $state.raw<Entry[]>([]);
 	let quota = $state<QuotaInfo | null>(null);
-	List('/').then((l) => (folders = (l ?? []).filter((e) => e.dir)));
-	const refreshQuota = () => Quota().then((q) => (quota = q));
-	refreshQuota();
-	$effect(() => Events.On('index', (ev) => ev.data.done && refreshQuota()));
+	const refresh = () => {
+		List('/').then((l) => (folders = (l ?? []).filter((e) => e.dir)));
+		Quota().then((q) => (quota = q));
+	};
+	refresh();
+	$effect(() => {
+		if (indexStatus.current?.done) refresh();
+	});
 
 	const route = $derived(page.route.id ?? '');
 	const inFiles = $derived(route.startsWith('/(app)/files'));
@@ -41,7 +45,6 @@
 
 	let menu = $state(false);
 
-	// Collapsible sidebar: instant, no animation.
 	let hidden = $state(prefs.sidebarHidden);
 	function toggleSidebar() {
 		hidden = !hidden;
@@ -52,8 +55,6 @@
 		await goto('/');
 	};
 
-	const mac = System.IsMac();
-	const desktop = mac || System.IsWindows();
 	$effect(() => {
 		if (desktop && prefs.drive[server.id]) Mount().catch(() => {});
 	});
@@ -88,7 +89,11 @@
 	});
 </script>
 
-<svelte:window ononline={() => net.offline && probe()} onclick={() => (menu = false)} />
+<svelte:window
+	ononline={() => net.offline && probe()}
+	onclick={() => (menu = false)}
+	onkeydown={(e) => e.key === 'Escape' && (menu = false)}
+/>
 
 <div class="flex h-screen">
 	<aside class="sidebar flex w-60 shrink-0 flex-col border-r border-line bg-bg" class:gone={hidden}>
@@ -153,17 +158,12 @@
 						>{low ? `${bytes(total - used)} left` : `${bytes(used)} / ${bytes(total)}`}</span
 					>
 				</div>
-				<div class="h-1.5 overflow-hidden rounded-full bg-surface-2">
-					<div
-						class="h-full rounded-full {low ? 'bg-warn' : 'bg-accent'}"
-						style="width:{(used / total) * 100}%"
-					></div>
-				</div>
+				<progress class="bar h-1.5" class:warn={low} value={used} max={total}></progress>
 			</div>
 		{/if}
 		<div class="relative px-3 pb-3">
 			{#if menu}
-				<div class="menu absolute bottom-full left-3 z-20 mb-1.5 w-67" use:pop role="menu">
+				<div class="menu pop absolute bottom-full left-3 z-20 mb-1.5 w-67" role="menu">
 					<div class="flex items-center gap-2.5 px-2.5 pt-2 pb-2.5">
 						<span
 							class="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-fg"

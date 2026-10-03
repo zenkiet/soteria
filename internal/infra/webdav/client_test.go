@@ -56,17 +56,17 @@ func TestListAndQuota(t *testing.T) {
 	}
 }
 
-// A server that refuses Depth: infinity forces the folder walk; the walk must still find everything.
+// SabreDAV answers Depth: infinity as Depth: 1; the walk must still find everything and fail on a broken folder.
 func TestTreeFallback(t *testing.T) {
-	tree := map[string][]string{"/": {"Photos/", "notes.txt"}, "/Photos/": {"cat.png"}}
+	tree := map[string][]string{"/": {"Photos/", "notes.txt"}, "/Photos/": {"cat.png"}, "/x/": {"broken/"}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Depth") == "infinity" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
 		p := r.URL.Path
 		if p[len(p)-1] != '/' {
 			p += "/"
+		}
+		if p == "/x/broken/" {
+			w.WriteHeader(http.StatusBadGateway)
+			return
 		}
 		w.WriteHeader(http.StatusMultiStatus)
 		body := `<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">`
@@ -85,6 +85,9 @@ func TestTreeFallback(t *testing.T) {
 	entries, err := c.Tree(context.Background(), "/", func(domain.IndexStatus) {})
 	if err != nil || len(entries) != 3 {
 		t.Fatalf("tree: %v %+v", err, entries)
+	}
+	if _, err := c.Tree(context.Background(), "/x", nil); err == nil {
+		t.Fatal("a folder that fails to list must fail the walk")
 	}
 }
 

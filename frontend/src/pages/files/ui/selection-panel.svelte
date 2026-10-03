@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Entry } from '@/shared/api';
-	import { bytes, iconFor, slideIn } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
+	import type { Entry } from '#/shared/api/index.ts';
+	import { bytes, iconFor } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	export type BulkAction = 'download' | 'move' | 'delete';
 
@@ -16,10 +16,7 @@
 	const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 </script>
 
-<aside
-	use:slideIn
-	class="flex w-80 shrink-0 flex-col gap-4 overflow-hidden border-l border-line p-5"
->
+<aside class="slide-in flex w-80 shrink-0 flex-col gap-4 overflow-hidden border-l border-line p-5">
 	<div
 		class="relative flex h-45 items-center justify-center gap-4 rounded-lg bg-surface-2 text-fg-3"
 	>

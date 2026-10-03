@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { InstallUpdate, RestartToUpdate, check, transfers, update } from '@/shared/api';
-	import { bytes, prefs, setPrefs, when } from '@/shared/lib';
-	import { Dialog, Icon } from '@/shared/ui';
-	import { Browser, System } from '@wailsio/runtime';
+	import { Browser } from '@wailsio/runtime';
+	import { InstallUpdate, RestartToUpdate, check, transfers, update } from '#/shared/api/index.ts';
+	import { bytes, prefs, setPrefs, when, windows } from '#/shared/lib/index.ts';
+	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	const s = $derived(update.s);
 	const running = $derived(
@@ -115,9 +115,7 @@
 			{/if}
 			{#if busy}
 				<div class="flex flex-col gap-2">
-					<div class="h-1.5 overflow-hidden rounded-full bg-surface-2">
-						<div class="h-full rounded-full bg-accent" style="width:{pct}%"></div>
-					</div>
+					<progress class="bar h-1.5" value={pct} max="100"></progress>
 					<div class="flex justify-between text-xs">
 						<span class="text-fg-2">
 							{#if s.state === 'downloading' && p}Downloading · {bytes(p.written)} of {bytes(
@@ -147,11 +145,11 @@
 				class="flex gap-2.5 rounded-md bg-danger-soft px-3 py-2.5 text-xs leading-relaxed text-danger"
 			>
 				<Icon name="info" size={15} class="mt-0.5 shrink-0" />
-				<span>{update.error} Nothing on this {System.IsWindows() ? 'PC' : 'Mac'} was changed.</span>
+				<span>{update.error} Nothing on this {windows ? 'PC' : 'Mac'} was changed.</span>
 			</div>
 		{:else if mode === 'blocked'}
 			<p class="text-fg-2">
-				{System.IsWindows()
+				{windows
 					? 'Soteria is installed in Program Files, which needs administrator rights to change. Download the new installer instead; it installs to your user folder and updates in place from then on.'
 					: 'Soteria is running from the disk image, so it can’t replace itself. Drag it to Applications, open it from there and check again.'}
 			</p>

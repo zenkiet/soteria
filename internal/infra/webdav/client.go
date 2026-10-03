@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ type Client struct {
 	Base       *url.URL
 	User, Pass string
 	HTTP       *http.Client
+	put        *http.Client
 }
 
 func New(s domain.Server, password string) (*Client, error) {
@@ -30,12 +32,15 @@ func New(s domain.Server, password string) (*Client, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, fmt.Errorf("invalid server address %q", s.URL)
 	}
-	return &Client{Base: u, User: s.Username, Pass: password, HTTP: &http.Client{Transport: &http.Transport{
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: s.Insecure},
-		ResponseHeaderTimeout: 30 * time.Second,
-		MaxIdleConnsPerHost:   16,
-		IdleConnTimeout:       90 * time.Second,
-	}}}, nil
+	t := http.DefaultTransport.(*http.Transport).Clone() //nolint:forcetypeassert // the stdlib default is always a *Transport
+	t.TLSClientConfig = &tls.Config{InsecureSkipVerify: s.Insecure}
+	t.ResponseHeaderTimeout = 30 * time.Second
+	t.MaxIdleConnsPerHost, t.MaxConnsPerHost = 16, 16
+	// Uploads stay on HTTP/1.1: a Go HTTP/2 server (SFTPGo) gives each connection one 1 MiB window for every PUT on it.
+	t1 := t.Clone()
+	t1.Protocols = new(http.Protocols)
+	t1.Protocols.SetHTTP1(true)
+	return &Client{Base: u, User: s.Username, Pass: password, HTTP: &http.Client{Transport: t}, put: &http.Client{Transport: t1}}, nil
 }
 
 func (c *Client) URL(p string) string { return c.Base.JoinPath(p).String() }
@@ -52,7 +57,11 @@ func (c *Client) Do(ctx context.Context, method, p string, body io.Reader, size 
 	for i := 0; i+1 < len(hdr); i += 2 {
 		req.Header.Set(hdr[i], hdr[i+1])
 	}
-	resp, err := c.HTTP.Do(req)
+	hc := c.HTTP
+	if method == http.MethodPut {
+		hc = c.put
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -66,7 +75,6 @@ func (c *Client) Do(ctx context.Context, method, p string, body io.Reader, size 
 	return resp, nil
 }
 
-// statusError turns a WebDAV status into a sentence the user can act on; the code stays attached for callers that need it.
 func statusError(code int, method, p string) error {
 	name := path.Base(p)
 	text := fmt.Sprintf("%s %s: %d", method, p, code)
@@ -99,7 +107,10 @@ func (c *Client) exec(ctx context.Context, method, p string, hdr ...string) erro
 	return resp.Body.Close()
 }
 
-const propfindBody = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><creationdate/><getcontenttype/><getetag/><quota-used-bytes/><quota-available-bytes/></prop></propfind>`
+const (
+	entryProps = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><creationdate/><getcontenttype/><getetag/></prop></propfind>`
+	quotaProps = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><quota-used-bytes/><quota-available-bytes/></prop></propfind>`
+)
 
 type propstat struct {
 	Status string `xml:"DAV: status"`
@@ -131,25 +142,35 @@ func (r response) ok() *propstat {
 	return nil
 }
 
-func (c *Client) propfind(ctx context.Context, p, depth string) ([]response, error) {
-	resp, err := c.Do(ctx, "PROPFIND", p, strings.NewReader(propfindBody), 0, "Depth", depth, "Content-Type", "application/xml")
+// propfind streams one <response> at a time so a whole-tree answer is never held in memory.
+func (c *Client) propfind(ctx context.Context, p, depth, props string, each func(response)) error {
+	resp, err := c.Do(ctx, "PROPFIND", p, strings.NewReader(props), 0, "Depth", depth, "Content-Type", "application/xml")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
-	var ms struct {
-		Responses []response `xml:"DAV: response"`
+	dec := xml.NewDecoder(resp.Body)
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("not a WebDAV server: %w", err)
+		}
+		if se, ok := tok.(xml.StartElement); ok && se.Name == (xml.Name{Space: "DAV:", Local: "response"}) {
+			var r response
+			if err := dec.DecodeElement(&r, &se); err != nil {
+				return fmt.Errorf("not a WebDAV server: %w", err)
+			}
+			each(r)
+		}
 	}
-	if err := xml.NewDecoder(resp.Body).Decode(&ms); err != nil {
-		return nil, fmt.Errorf("not a WebDAV server: %w", err)
-	}
-	return ms.Responses, nil
 }
 
 // Ping is the cheapest round trip that also validates the login.
 func (c *Client) Ping(ctx context.Context) error {
-	_, err := c.propfind(ctx, "/", "0")
-	return err
+	return c.propfind(ctx, "/", "0", entryProps, func(response) {})
 }
 
 func (c *Client) entry(r response) (domain.Entry, bool) {
@@ -173,16 +194,15 @@ func (c *Client) entry(r response) (domain.Entry, bool) {
 }
 
 func (c *Client) List(ctx context.Context, p string) ([]domain.Entry, error) {
-	rs, err := c.propfind(ctx, p, "1")
-	if err != nil {
-		return nil, err
-	}
 	self := path.Clean("/" + p)
 	out := []domain.Entry{}
-	for _, r := range rs {
+	err := c.propfind(ctx, p, "1", entryProps, func(r response) {
 		if e, ok := c.entry(r); ok && e.Path != self && e.Path != domain.TrashDir {
 			out = append(out, e)
 		}
+	})
+	if err != nil {
+		return nil, err
 	}
 	slices.SortFunc(out, func(a, b domain.Entry) int {
 		if a.Dir != b.Dir {
@@ -196,25 +216,38 @@ func (c *Client) List(ctx context.Context, p string) ([]domain.Entry, error) {
 	return out, nil
 }
 
-// Tree returns every entry under root with one Depth: infinity PROPFIND, walking folder by folder when the server refuses it.
+// Tree returns everything under root, walking folder by folder when Depth: infinity is refused or downgraded (SabreDAV).
 func (c *Client) Tree(ctx context.Context, root string, progress func(domain.IndexStatus)) ([]domain.Entry, error) {
 	root = path.Clean("/" + root)
 	out := []domain.Entry{}
-	if rs, err := c.propfind(ctx, root, "infinity"); err == nil {
-		for _, r := range rs {
-			if e, ok := c.entry(r); ok && e.Path != root && !strings.HasPrefix(e.Path, domain.TrashDir) {
-				out = append(out, e)
+	var dirs []string
+	deep := false
+	err := c.propfind(ctx, root, "infinity", entryProps, func(r response) {
+		if e, ok := c.entry(r); ok && e.Path != root && !strings.HasPrefix(e.Path, domain.TrashDir) {
+			out = append(out, e)
+			deep = deep || path.Dir(e.Path) != root
+			if e.Dir {
+				dirs = append(dirs, e.Path)
 			}
 		}
+	})
+	if err == nil && deep {
 		return out, nil
 	}
-	queue := []string{root}
+	queue := dirs
+	if err != nil {
+		out, queue = out[:0], []string{root}
+	}
 	last := time.Now()
 	for done := 1; len(queue) > 0; done++ {
 		list, err := c.List(ctx, queue[0])
 		queue = queue[1:]
-		if err != nil {
+		if de, ok := errors.AsType[*domain.DavError](err); ok && (de.Code == http.StatusForbidden || de.Code == http.StatusNotFound) {
 			continue
+		}
+		// A dropped connection must fail the walk, not pass for a smaller tree.
+		if err != nil {
+			return nil, err
 		}
 		for _, e := range list {
 			out = append(out, e)
@@ -232,11 +265,7 @@ func (c *Client) Tree(ctx context.Context, root string, progress func(domain.Ind
 
 func (c *Client) Quota(ctx context.Context) (domain.Quota, error) {
 	q := domain.Quota{Used: -1, Available: -1}
-	rs, err := c.propfind(ctx, "/", "0")
-	if err != nil {
-		return q, err
-	}
-	for _, r := range rs {
+	err := c.propfind(ctx, "/", "0", quotaProps, func(r response) {
 		if ps := r.ok(); ps != nil {
 			if ps.Prop.Used != nil {
 				q.Used = *ps.Prop.Used
@@ -245,6 +274,9 @@ func (c *Client) Quota(ctx context.Context) (domain.Quota, error) {
 				q.Available = *ps.Prop.Avail
 			}
 		}
+	})
+	if err != nil {
+		return q, err
 	}
 	if q.Used < 0 {
 		if rq, ok := c.restQuota(ctx); ok {
@@ -254,8 +286,7 @@ func (c *Client) Quota(ctx context.Context) (domain.Quota, error) {
 	return q, nil
 }
 
-// restQuota reads the SFTPGo user record exposed by a reverse proxy at <origin>/api/quota/<username>;
-// quota_size 0 means no limit. Anything but a matching 200 JSON is treated as "no quota".
+// restQuota reads the SFTPGo user a reverse proxy exposes at /api/quota/<user>; quota_size 0 means unlimited.
 func (c *Client) restQuota(ctx context.Context) (domain.Quota, bool) {
 	u := *c.Base
 	u.Path, u.RawQuery = "/api/quota/"+url.PathEscape(c.User), ""
@@ -298,7 +329,7 @@ func (c *Client) Copy(ctx context.Context, from, to string) error {
 // Mkdirs creates dir and its parents, ignoring the ones that already exist.
 func (c *Client) Mkdirs(ctx context.Context, dir string) {
 	p := "/"
-	for _, seg := range strings.Split(strings.Trim(dir, "/"), "/") {
+	for seg := range strings.SplitSeq(strings.Trim(dir, "/"), "/") {
 		if seg != "" {
 			p = path.Join(p, seg)
 			_ = c.Mkcol(ctx, p)

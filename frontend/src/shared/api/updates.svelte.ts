@@ -1,6 +1,6 @@
-import { CheckUpdate, UpdateStatus } from '@bindings/soteria/internal/infra/wails/app';
-import type { Update } from '@bindings/soteria/internal/domain/models';
 import { Events, Updater } from '@wailsio/runtime';
+import type { Update } from '#bindings/soteria/internal/domain/models.ts';
+import { CheckUpdate, UpdateStatus } from '#bindings/soteria/internal/infra/wails/app.ts';
 
 type Progress = { written: number; total: number; rate: number };
 

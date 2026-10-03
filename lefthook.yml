@@ -19,7 +19,7 @@ pre-commit:
     - name: frontend-format
       root: frontend/
       glob: "*.{ts,js,mjs,cjs,svelte,css,scss,html,json,yml,yaml}"
-      run: pnpm exec prettier --cache --write {staged_files}
+      run: pnpm exec oxfmt {staged_files}
       stage_fixed: true
 
     - name: frontend-type-check

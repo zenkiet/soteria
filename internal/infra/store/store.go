@@ -1,4 +1,4 @@
-// Package store is everything Soteria keeps on the local disk: the config folder, saved servers, window geometry, log, thumbnail cache.
+// Package store is everything Soteria keeps on the local disk: the config folder, saved servers, window geometry, log, caches.
 package store
 
 import (
@@ -21,7 +21,16 @@ func Dir() string {
 	return filepath.Join(dir, "Soteria")
 }
 
-func ThumbDir() string { return filepath.Join(Dir(), "thumbs") }
+// CacheDir is <UserCacheDir>/Soteria: thumbnails and search index snapshots, anything the OS may clear.
+func CacheDir() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return filepath.Join(Dir(), "cache")
+	}
+	return filepath.Join(dir, "Soteria")
+}
+
+func ThumbDir() string { return filepath.Join(CacheDir(), "thumbs") }
 
 func serversFile() string { return filepath.Join(Dir(), "servers.json") }
 
@@ -76,8 +85,9 @@ func FindServer(id string) (domain.Server, bool) {
 
 // WindowState survives relaunches in <config>/window.json.
 type WindowState struct {
-	W, H   int
-	Hinted bool // "still running" notification already shown once
+	W, H int
+	// Hinted records that the "still running" notification was shown.
+	Hinted bool
 }
 
 func windowFile() string { return filepath.Join(Dir(), "window.json") }

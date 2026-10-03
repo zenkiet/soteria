@@ -1,7 +1,5 @@
 export type Theme = 'system' | 'light' | 'dark';
 
-const mq = matchMedia('(prefers-color-scheme: dark)');
-
 function stored(): Theme {
 	try {
 		return (localStorage.getItem('theme') as Theme | null) ?? 'system';
@@ -12,22 +10,14 @@ function stored(): Theme {
 
 export const theme = $state({ value: stored() });
 
-function apply() {
-	document.documentElement.dataset.theme =
-		theme.value === 'system' ? (mq.matches ? 'dark' : 'light') : theme.value;
-}
-
+// 'system' drops the attribute and the stylesheet's color-scheme follows the OS on its own.
 export function setTheme(t: Theme) {
 	theme.value = t;
-	apply();
+	if (t === 'system') delete document.documentElement.dataset.theme;
+	else document.documentElement.dataset.theme = t;
 	try {
 		localStorage.setItem('theme', t);
 	} catch {
 		// storage unavailable in this webview; the choice lasts for the session
 	}
-}
-
-export function initTheme() {
-	mq.addEventListener('change', apply);
-	apply();
 }

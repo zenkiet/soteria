@@ -78,8 +78,8 @@ export function EmptyTrash(): $CancellablePromise<void> {
     return $Call.ByID(2922579444);
 }
 
-export function FolderUsage(dir: string): $CancellablePromise<domain$0.Usage> {
-    return $Call.ByID(2102640720, dir);
+export function FolderUsages(dir: string): $CancellablePromise<{ [_ in string]?: domain$0.Usage } | null> {
+    return $Call.ByID(1842837273, dir);
 }
 
 export function Forget(id: string): $CancellablePromise<void> {

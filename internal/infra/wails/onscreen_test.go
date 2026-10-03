@@ -9,16 +9,21 @@ import (
 func TestOnScreen(t *testing.T) {
 	screens := []*application.Screen{
 		{Bounds: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}},
-		{Bounds: application.Rect{X: -1440, Y: 0, Width: 1440, Height: 900}}, // monitor to the left
+		// a monitor to the left
+		{Bounds: application.Rect{X: -1440, Y: 0, Width: 1440, Height: 900}},
 	}
 	cases := []struct {
 		x, y, w int
 		want    bool
 	}{
-		{100, 100, 1280, true},    // on primary
-		{-1400, 50, 1280, true},   // on left monitor
-		{2500, 100, 1280, false},  // on an unplugged right monitor
-		{100, -2000, 1280, false}, // above every screen
+		// on primary
+		{100, 100, 1280, true},
+		// on the left monitor
+		{-1400, 50, 1280, true},
+		// on an unplugged right monitor
+		{2500, 100, 1280, false},
+		// above every screen
+		{100, -2000, 1280, false},
 	}
 	for _, c := range cases {
 		if got := onScreen(screens, c.x, c.y, c.w); got != c.want {

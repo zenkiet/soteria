@@ -8,12 +8,15 @@ import type { Events } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import type * as domain$0 from "../../../../../soteria/internal/domain/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as wails$0 from "../../../../../soteria/internal/infra/wails/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "dragend": boolean;
-            "dropped": string[] | null;
+            "dropped": wails$0.Drop;
             "index": domain$0.IndexStatus;
             "nav": string;
             "transfer": domain$0.Transfer;

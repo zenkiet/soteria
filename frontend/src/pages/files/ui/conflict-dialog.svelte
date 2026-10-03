@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Conflict } from '@/shared/api';
-	import { bytes, when } from '@/shared/lib';
-	import { Dialog } from '@/shared/ui';
+	import type { Conflict } from '#/shared/api/index.ts';
+	import { bytes, when } from '#/shared/lib/index.ts';
+	import { Dialog } from '#/shared/ui/index.ts';
 
 	export type Resolution = 'skip' | 'keep' | 'replace' | 'merge';
 

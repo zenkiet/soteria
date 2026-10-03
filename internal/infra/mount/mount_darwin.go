@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httputil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,7 +56,7 @@ func (m *Mounter) Mount() (domain.Drive, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "mount_webdav", "-S", "-v", "Soteria", "http://"+m.ln.Addr().String()+"/", dir).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "mount_webdav", "-S", "-v", "Soteria", "http://"+ln.Addr().String()+"/", dir).CombinedOutput()
 	if ctx.Err() != nil {
 		return domain.Drive{}, errors.New("couldn't connect the drive: Finder didn't answer in 20 s")
 	}
@@ -76,3 +79,54 @@ func (m *Mounter) Unmount() error {
 }
 
 func (m *Mounter) InstallDriver() error { return nil }
+
+// ln is the loopback proxy's listener, set once under Mounter.mu.
+var ln net.Listener
+
+const loopbackPort = "34873"
+
+// serveLoopback adds the login on 127.0.0.1 so the OS mounts the server without holding credentials.
+func (m *Mounter) serveLoopback() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ln != nil {
+		return nil
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:"+loopbackPort)
+	if err != nil {
+		l, err = net.Listen("tcp", "127.0.0.1:0")
+	}
+	if err != nil {
+		return err
+	}
+	ln = l
+	// Only the header timeout: read/write deadlines would cut off large transfers.
+	srv := &http.Server{Handler: http.HandlerFunc(m.proxy), ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(l) }()
+	return nil
+}
+
+func (m *Mounter) proxy(w http.ResponseWriter, r *http.Request) {
+	// mount_webdav sends neither header and always the loopback Host; browsers (and DNS-rebound names) can't match that.
+	if r.Host != ln.Addr().String() || r.Header.Get("Origin") != "" || r.Header.Get("Sec-Fetch-Mode") != "" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	c, err := m.client()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	local, base := "http://"+r.Host, strings.TrimSuffix(c.Base.String(), "/")
+	rp := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(c.Base)
+			pr.Out.SetBasicAuth(c.User, c.Pass)
+			if dst, ok := strings.CutPrefix(pr.In.Header.Get("Destination"), local); ok {
+				pr.Out.Header.Set("Destination", base+dst)
+			}
+		},
+		Transport: c.HTTP.Transport,
+	}
+	rp.ServeHTTP(w, r)
+}

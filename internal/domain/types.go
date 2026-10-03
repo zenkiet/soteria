@@ -14,7 +14,7 @@ type Entry struct {
 	ETag        string    `json:"etag"`
 }
 
-// Quota in bytes; -1 when the server does not report it.
+// Quota is in bytes; -1 means the server does not report it.
 type Quota struct {
 	Used      int64 `json:"used"`
 	Available int64 `json:"available"`

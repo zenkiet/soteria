@@ -30,7 +30,7 @@ func dpapi(in []byte, protect bool) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data)))
+	defer func() { _, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data))) }()
 	return append([]byte(nil), unsafe.Slice(out.Data, out.Size)...), nil
 }
 

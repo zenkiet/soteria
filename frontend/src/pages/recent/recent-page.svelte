@@ -1,22 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Indexed, Recent, Reindex, type Entry, type IndexStatus } from '@/shared/api';
-	import { ago, bytes, filesHref, iconFor, parent, reveal, when } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
-	import { Events } from '@wailsio/runtime';
+	import { Recent, Reindex, indexStatus, type Entry } from '#/shared/api/index.ts';
+	import { ago, bytes, filesHref, iconFor, parent, when } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
-	let items = $state<Entry[]>([]);
-	let idx = $state<IndexStatus | null>(null);
+	let items = $state.raw<Entry[]>([]);
+	const idx = $derived(indexStatus.current);
 
 	const load = () => Recent(60).then((l) => (items = l ?? []));
 	load();
-	Indexed().then((s) => (idx = s));
-	$effect(() =>
-		Events.On('index', (ev) => {
-			idx = ev.data;
-			if (ev.data.done) load();
-		})
-	);
+	$effect(() => {
+		if (idx?.done) load();
+	});
 
 	const day = 86_400_000;
 	const today = Date.parse(new Date().toDateString());
@@ -39,10 +34,7 @@
 		goto(filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path));
 </script>
 
-<header
-	class="flex h-13 shrink-0 items-center gap-3 border-b border-line px-5"
-	style="--wails-draggable: drag"
->
+<header class="page-header">
 	<h1 class="text-[15px] font-semibold tracking-tight">Recent</h1>
 	<div class="flex-1"></div>
 	{#if idx?.at}
@@ -58,7 +50,7 @@
 	{#each groups as [label, list] (label)}
 		<section class="flex flex-col gap-1">
 			<h2 class="font-medium">{label} <span class="font-normal text-fg-3">{list.length}</span></h2>
-			<div use:reveal>
+			<div class="reveal">
 				{#each list as e (e.path)}
 					<button
 						class="grid h-13 w-full grid-cols-[minmax(0,1fr)_90px_170px] items-center gap-3 border-t border-line px-2 text-left hover:bg-surface-2"

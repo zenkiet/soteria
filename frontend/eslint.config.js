@@ -1,6 +1,6 @@
-import prettier from 'eslint-config-prettier';
 import path from 'node:path';
 import js from '@eslint/js';
+import prettier from 'eslint-config-prettier';
 import boundaries from 'eslint-plugin-boundaries';
 import svelte from 'eslint-plugin-svelte';
 import { defineConfig, includeIgnoreFile } from 'eslint/config';
@@ -47,14 +47,14 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
 		rules: { 'svelte/no-navigation-without-resolve': 'off' }
 	},
 	{
 		files: ['src/**/*.{js,ts,svelte}'],
 		plugins: { boundaries },
 		settings: {
+			// Without a resolver, `#/...` imports aren't classified and slip past the layer rules.
+			'import/resolver': { typescript: { project: './tsconfig.json' } },
 			'boundaries/dependency-nodes': ['import', 'dynamic-import'],
 			'boundaries/elements': [
 				...SLICED.map((layer) => ({

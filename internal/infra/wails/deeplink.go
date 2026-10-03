@@ -2,9 +2,7 @@ package wails
 
 import "strings"
 
-// Deep links mirror SPA routes: soteria://files/<path> opens the app at /files/<path>.
-// The payload stays percent-encoded end to end; the router decodes it.
-
+// soteria://files/<path> opens /files/<path>; the path stays percent-encoded and the router decodes it.
 func linkRoute(u string) string {
 	route, ok := strings.CutPrefix(u, "soteria:/")
 	if !ok || !strings.HasPrefix(route, "/files/") {
@@ -13,9 +11,7 @@ func linkRoute(u string) string {
 	return route
 }
 
-// openLink shows the window at the linked folder. Before sign-in the SPA would
-// land on an error page, so the route is parked instead and the frontend picks
-// it up with DeepLink once it has connected.
+// Before sign-in the route would land on an error page, so it is parked for DeepLink instead.
 func (a *App) openLink(u string) {
 	route := linkRoute(u)
 	if route == "" {

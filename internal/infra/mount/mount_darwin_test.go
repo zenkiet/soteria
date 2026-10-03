@@ -22,7 +22,7 @@ func TestLoopbackProxy(t *testing.T) {
 	if err := m.serveLoopback(); err != nil {
 		t.Fatal(err)
 	}
-	local := "http://" + m.ln.Addr().String()
+	local := "http://" + ln.Addr().String()
 	req, _ := http.NewRequest("MOVE", local+"/a", nil)
 	req.Header.Set("Destination", local+"/b")
 	resp, err := http.DefaultClient.Do(req)
@@ -35,5 +35,12 @@ func TestLoopbackProxy(t *testing.T) {
 	}
 	if gotPath != "/dav/a" || gotDest != up.URL+"/dav/b" || !strings.HasPrefix(gotAuth, "Basic ") {
 		t.Fatalf("upstream saw path=%q dest=%q auth=%q", gotPath, gotDest, gotAuth)
+	}
+	req, _ = http.NewRequest("GET", local+"/a", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("a browser request must be refused: %v %v", err, resp)
+	} else {
+		resp.Body.Close()
 	}
 }

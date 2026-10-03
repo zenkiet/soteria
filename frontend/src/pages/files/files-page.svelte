@@ -5,13 +5,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { Clipboard, Events } from '@wailsio/runtime';
+	import { tick, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		Copy,
 		Download,
 		DownloadDir,
 		DragOut,
-		FolderUsage,
-		Indexed,
+		FolderUsages,
 		Open,
 		List,
 		Mkdir,
@@ -22,14 +24,14 @@
 		Restore,
 		Search,
 		Trash,
+		indexStatus,
 		Upload,
 		UploadAs,
 		type Conflict,
 		type Entry,
-		type IndexStatus,
 		type Server,
 		type Usage
-	} from '@/shared/api';
+	} from '#/shared/api/index.ts';
 	import {
 		ago,
 		bytes,
@@ -37,26 +39,22 @@
 		iconFor,
 		join,
 		kind,
+		mac,
 		msg,
 		net,
 		parent,
-		pop,
 		prefs,
 		previewKind,
 		previewUrl,
-		reveal,
 		setPrefs,
 		thumbUrl,
 		toast,
 		validName,
 		when,
 		type SortKey
-	} from '@/shared/lib';
-	import { Dialog, Icon } from '@/shared/ui';
-	import { Clipboard, Events, System } from '@wailsio/runtime';
-	import { untrack } from 'svelte';
+	} from '#/shared/lib/index.ts';
+	import { Dialog, Icon, type IconName } from '#/shared/ui/index.ts';
 	import ConflictDialog, { type Resolution } from './ui/conflict-dialog.svelte';
-	import DetailsPanel, { type Action } from './ui/details-panel.svelte';
 	import MoveDialog from './ui/move-dialog.svelte';
 	import Preview from './ui/preview.svelte';
 	import SelectionPanel from './ui/selection-panel.svelte';
@@ -66,12 +64,16 @@
 	const crumbs = $derived(dir === '/' ? [] : dir.slice(1).split('/'));
 	const server = $derived(page.data.server as Server);
 
-	let entries = $state<Entry[]>([]);
-	let usage = $state<Record<string, Usage>>({});
+	let entries = $state.raw<Entry[]>([]);
+	let usage = $state.raw<{ [path: string]: Usage | undefined }>({});
 	let loading = $state(true);
 	let error = $state('');
 	let query = $state('');
-	let sel = $state<string[]>([]);
+	const sel = new SvelteSet<string>();
+	const select = (paths: string[]) => {
+		sel.clear();
+		for (const p of paths) sel.add(p);
+	};
 	let anchor = '';
 	let preview = $state<Entry | null>(null);
 	let menu = $state<{ x: number; y: number; items: Entry[] } | null>(null);
@@ -80,8 +82,8 @@
 	let targets = $state<Entry[]>([]);
 	let name = $state('');
 	let scope = $state<'folder' | 'all'>('folder');
-	let results = $state<Entry[]>([]);
-	let idx = $state<IndexStatus | null>(null);
+	let results = $state.raw<Entry[]>([]);
+	const idx = $derived(indexStatus.current);
 	let conflicts = $state<Conflict[]>([]);
 	let clip = $state<{ items: Entry[]; cut: boolean } | null>(null);
 	let loadedAt = 0;
@@ -95,13 +97,16 @@
 	];
 	const sortLabel = $derived(SORTS.find(([k]) => k === prefs.sort)?.[1] ?? 'Name');
 
-	const entrySize = (e: Entry) =>
-		e.dir ? (usage[e.path]?.known ? usage[e.path].bytes : null) : e.size;
+	const entrySize = (e: Entry) => {
+		const u = usage[e.path];
+		return !e.dir ? e.size : u?.known ? u.bytes : null;
+	};
 	const shownSize = (e: Entry) => {
 		const n = entrySize(e);
 		return n === null ? '—' : bytes(n);
 	};
 
+	const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 	function compare(a: Entry, b: Entry) {
 		const k = prefs.sort;
 		let r =
@@ -112,9 +117,9 @@
 					: k === 'created'
 						? Date.parse(a.created) - Date.parse(b.created)
 						: k === 'kind'
-							? kind(a).localeCompare(kind(b))
+							? collator.compare(kind(a), kind(b))
 							: 0;
-		if (!r) r = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+		if (!r) r = collator.compare(a.name, b.name);
 		return prefs.asc ? r : -r;
 	}
 
@@ -135,35 +140,52 @@
 	const hits = $derived(results.filter(shownName).sort(compare));
 	const shown = $derived(searching ? hits : rows);
 	const viewable = $derived(shown.filter((e) => !e.dir && previewKind(e.name)));
-	const picked = $derived(shown.filter((e) => sel.includes(e.path)));
+	const picked = $derived(shown.filter((e) => sel.has(e.path)));
 	const single = $derived(picked.length === 1 ? picked[0] : null);
 
-	async function loadUsage(list: Entry[], d: string) {
-		const pairs = await Promise.all(
-			list.filter((e) => e.dir).map(async (e) => [e.path, await FolderUsage(e.path)] as const)
-		);
-		if (dir === d) usage = Object.fromEntries(pairs);
+	async function loadUsage(d: string) {
+		const u = (await FolderUsages(d)) ?? {};
+		if (dir === d) usage = u;
 	}
 
+	// A newer load cancels the one in flight; the old folder stays on screen until the new one crossfades in.
+	let listing: ReturnType<typeof List> | null = null;
+	let shownDir = '';
 	async function load(d: string) {
+		listing?.cancel();
+		const call = (listing = List(d));
 		loading = true;
 		try {
-			entries = (await List(d)) ?? [];
-			loadUsage(entries, d);
+			const list = (await call) ?? [];
+			if (call !== listing) return;
+			const swap = () => {
+				entries = list;
+				return tick();
+			};
+			if (d !== shownDir && 'startViewTransition' in document)
+				await document.startViewTransition(swap).updateCallbackDone;
+			else await swap();
+			shownDir = d;
+			loadUsage(d);
 			error = '';
 			const f = page.url.searchParams.get('focus');
 			if (f) {
-				sel = [f];
+				select([f]);
 				anchor = f;
+				await tick();
+				document
+					.querySelector(`[data-path="${CSS.escape(f)}"]`)
+					?.scrollIntoView({ block: 'center' });
 			}
 		} catch (e) {
+			if (call !== listing) return;
 			error = msg(e);
 		}
 		loading = false;
 		loadedAt = Date.now();
 	}
 
-	// User-triggered refresh: spin at least one turn so a fast reload is still visible.
+	// Spin at least one turn so a fast reload still shows feedback.
 	let spinning = $state(false);
 	async function refresh() {
 		spinning = true;
@@ -181,8 +203,7 @@
 	);
 
 	$effect(() => {
-		entries = [];
-		sel = [];
+		sel.clear();
 		preview = null;
 		query = '';
 		scope = 'folder';
@@ -190,7 +211,7 @@
 		if (!restored) {
 			restored = true;
 			if (!path && last && last !== '/') {
-				goto(filesHref(last), { replaceState: true });
+				goto(filesHref(last), { replace: true });
 				return;
 			}
 		}
@@ -206,18 +227,17 @@
 		if (net.back) load(dir);
 	});
 
-	$effect(() =>
-		Events.On('index', (ev) => {
-			idx = ev.data;
-			loadUsage(entries, dir);
-			if (searching) Search(query).then((r) => (results = r ?? []));
-		})
-	);
-	Indexed().then((s) => (idx = s));
+	$effect(() => {
+		if (idx?.done)
+			untrack(() => {
+				loadUsage(dir);
+				if (searching) Search(query).then((r) => (results = r ?? []));
+			});
+	});
 
 	$effect(() =>
 		Events.On('dropped', (ev) =>
-			Upload(ev.data, dir)
+			Upload(ev.data.files, ev.data.dir || dir)
 				.then(queueConflicts)
 				.catch((e) => toast(msg(e), 'error'))
 		)
@@ -276,12 +296,18 @@
 		}
 	}
 
+	// All calls run at once; the first failure is thrown only after every call has settled.
+	async function each<T>(items: T[], f: (x: T) => Promise<unknown>) {
+		const failed = (await Promise.allSettled(items.map(f))).find((r) => r.status === 'rejected');
+		if (failed) throw failed.reason;
+	}
+
 	async function trashAll(items: Entry[]) {
-		sel = [];
+		sel.clear();
 		menu = null;
 		const moved: string[] = [];
 		try {
-			for (const e of items) moved.push(await Trash(e.path));
+			await each(items, async (e) => moved.push(await Trash(e.path)));
 		} catch (e) {
 			toast(msg(e), 'error');
 		}
@@ -294,10 +320,7 @@
 				'ok',
 				{
 					label: 'Undo',
-					run: () =>
-						run(async () => {
-							for (const p of moved) await Restore(p);
-						}, 'Restored')
+					run: () => run(() => each(moved, Restore), 'Restored')
 				}
 			);
 	}
@@ -305,21 +328,15 @@
 	function moveAll(dest: string) {
 		const items = targets;
 		run(
-			async () => {
-				for (const e of items) await Move(e.path, join(dest, e.name));
-			},
+			() => each(items, (e) => Move(e.path, join(dest, e.name))),
 			`Moved to ${dest}`,
-			async () => {
-				for (const e of items) await Move(join(dest, e.name), e.path);
-			}
+			() => each(items, (e) => Move(join(dest, e.name), e.path))
 		);
 	}
 
 	function copyAll(dest: string) {
 		const items = targets;
-		run(async () => {
-			for (const e of items) await Copy(e.path, join(dest, e.name));
-		}, `Copied to ${dest}`);
+		run(() => each(items, (e) => Copy(e.path, join(dest, e.name))), `Copied to ${dest}`);
 	}
 
 	// dup picks "name copy.ext", then "name copy 2.ext"… until the name is free in this folder.
@@ -344,13 +361,12 @@
 		const items = c.items.filter((e) => !c.cut || parent(e.path) !== dir);
 		if (!items.length) return;
 		run(
-			async () => {
-				for (const e of items) {
-					if (c.cut) await Move(e.path, join(dir, e.name));
-					else
-						await Copy(e.path, join(dir, entries.some((x) => x.name === e.name) ? dup(e) : e.name));
-				}
-			},
+			() =>
+				each(items, (e) =>
+					c.cut
+						? Move(e.path, join(dir, e.name))
+						: Copy(e.path, join(dir, entries.some((x) => x.name === e.name) ? dup(e) : e.name))
+				),
 			`${c.cut ? 'Moved' : 'Pasted'} ${items.length} ${items.length === 1 ? 'item' : 'items'}`
 		);
 	}
@@ -394,14 +410,13 @@
 			const a = shown.findIndex((x) => x.path === anchor);
 			if (a >= 0) {
 				const b = shown.findIndex((x) => x.path === e.path);
-				sel = shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
+				select(shown.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path));
 				return;
 			}
 			// the anchored row is gone (moved, deleted, filtered): fall through and re-anchor
 		}
-		if (ev.metaKey || ev.ctrlKey) {
-			sel = sel.includes(e.path) ? sel.filter((p) => p !== e.path) : [...sel, e.path];
-		} else sel = [e.path];
+		if (!(ev.metaKey || ev.ctrlKey)) select([e.path]);
+		else if (!sel.delete(e.path)) sel.add(e.path);
 		anchor = e.path;
 	}
 
@@ -420,31 +435,27 @@
 		if (e.dir) goto(filesHref(e.path));
 		else if (parent(e.path) === dir) {
 			query = '';
-			sel = [e.path];
+			select([e.path]);
 		} else goto(filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path));
-	}
-
-	function act(a: Action, e: Entry) {
-		if (a === 'preview') preview = e;
-		else if (a === 'download') downloadAll([e]);
-		else if (a === 'copy') copyLink(e);
-		else if (a === 'delete') trashAll([e]);
-		else open(a, [e]);
 	}
 
 	function showAreaMenu(ev: MouseEvent) {
 		ev.preventDefault();
-		menu = {
-			x: Math.min(ev.clientX, innerWidth - 232),
-			y: Math.min(ev.clientY, innerHeight - 220),
-			items: []
-		};
+		menu = { x: ev.clientX, y: ev.clientY, items: [] };
 	}
+
+	// A popover keeps the menu above toasts and panels; it can only be clamped once it has a size.
+	const at = (x: number, y: number) => (el: HTMLElement) => {
+		if (!el.matches(':popover-open')) el.showPopover();
+		el.style.left = `${Math.min(x, innerWidth - el.offsetWidth - 8)}px`;
+		el.style.top = `${Math.min(y, innerHeight - el.offsetHeight - 8)}px`;
+	};
 
 	const entryProps = (e: Entry) => ({
 		role: 'button',
 		tabindex: 0,
 		'data-path': e.path,
+		'data-file-drop-target': e.dir && !draggingOut ? true : undefined,
 		draggable: !e.dir,
 		onclick: (ev: MouseEvent) => pick(e, ev),
 		onkeydown: (ev: KeyboardEvent) => ev.key === 'Enter' && openEntry(e),
@@ -457,22 +468,19 @@
 	function showMenu(ev: MouseEvent, e: Entry) {
 		ev.preventDefault();
 		ev.stopPropagation();
-		if (!sel.includes(e.path)) {
-			sel = [e.path];
+		if (!sel.has(e.path)) {
+			select([e.path]);
 			anchor = e.path;
 		}
-		const items = sel.length > 1 ? shown.filter((x) => sel.includes(x.path)) : [e];
-		menu = {
-			x: Math.min(ev.clientX, innerWidth - 232),
-			y: Math.min(ev.clientY, innerHeight - 220),
-			items
-		};
+		const items = sel.size > 1 ? shown.filter((x) => sel.has(x.path)) : [e];
+		menu = { x: ev.clientX, y: ev.clientY, items };
 	}
 
 	function keys(ev: KeyboardEvent) {
 		if (ev.key === 'Escape') {
+			if (!menu && !sortOpen && !preview && !dialog) sel.clear();
 			menu = null;
-			sel = [];
+			sortOpen = false;
 			return;
 		}
 		if (ev.target instanceof HTMLInputElement || preview || dialog) return;
@@ -491,7 +499,7 @@
 			if (single && !single.dir) preview = single;
 			else return;
 		} else if (!mod) return;
-		else if (k === 'a') sel = shown.map((e) => e.path);
+		else if (k === 'a') select(shown.map((e) => e.path));
 		else if ((k === 'c' || k === 'x') && picked.length) clip = { items: picked, cut: k === 'x' };
 		else if (k === 'v') paste();
 		else if (k === 'r') refresh();
@@ -505,20 +513,20 @@
 		menu = null;
 		sortOpen = false;
 		if (!(ev.target as Element).closest('[role=button],button,a,input,label,aside,dialog'))
-			sel = [];
+			sel.clear();
 	}
 
 	let draggingOut = $state(false);
 	$effect(() => Events.On('dragend', () => (draggingOut = false)));
 
 	function dragStart(ev: DragEvent, e: Entry) {
-		const items = (sel.includes(e.path) ? picked : [e]).filter((x) => !x.dir);
+		const items = (sel.has(e.path) ? picked : [e]).filter((x) => !x.dir);
 		if (!items.length) {
 			ev.preventDefault();
 			return;
 		}
 		draggingOut = true;
-		if (System.IsMac()) {
+		if (mac) {
 			ev.preventDefault();
 			DragOut(items).catch((err) => {
 				draggingOut = false;
@@ -536,8 +544,8 @@
 
 	const cols =
 		'grid-cols-[minmax(0,1fr)_90px_170px_36px] @4xl:grid-cols-[minmax(0,1fr)_120px_90px_170px_170px_36px]';
-	const on = (e: Entry) => sel.includes(e.path);
-	const mod = System.IsMac() ? '⌘' : 'Ctrl+';
+	const on = (e: Entry) => sel.has(e.path);
+	const mod = mac ? '⌘' : 'Ctrl+';
 </script>
 
 <svelte:window
@@ -557,6 +565,13 @@
 	</button>
 {/snippet}
 
+{#snippet item(icon: IconName, label: string, run: () => unknown, key = '', disabled = false)}
+	<button class="menu-item" {disabled} onclick={run}>
+		<Icon name={icon} size={15} class="text-fg-2" />{label}{#if key}<kbd class="ml-auto">{key}</kbd
+			>{/if}
+	</button>
+{/snippet}
+
 {#snippet dots(e: Entry)}
 	<button
 		class="btn btn-ghost h-7 w-7 px-0 text-fg-3"
@@ -567,7 +582,7 @@
 
 {#snippet row(e: Entry)}
 	<div
-		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 hover:bg-surface-2 {cols} {on(
+		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_2.75rem] [content-visibility:auto] hover:bg-surface-2 {cols} {on(
 			e
 		)
 			? 'bg-accent-soft hover:bg-accent-soft'
@@ -586,10 +601,7 @@
 	</div>
 {/snippet}
 
-<header
-	class="flex h-13 shrink-0 items-center gap-3 border-b border-line px-5"
-	style="--wails-draggable: drag"
->
+<header class="page-header">
 	<div class="flex gap-0.5">
 		<button class="btn btn-ghost btn-icon" onclick={() => history.back()} aria-label="Back">
 			<Icon name="arrowLeft" />
@@ -608,10 +620,10 @@
 			>
 		{/each}
 	</nav>
-	{#if sel.length > 1}
+	{#if sel.size > 1}
 		<button
 			class="flex h-7 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 text-xs font-medium text-accent-fg"
-			onclick={() => (sel = [])}>{sel.length} selected<Icon name="x" size={12} /></button
+			onclick={() => sel.clear()}>{sel.size} selected<Icon name="x" size={12} /></button
 		>
 	{/if}
 	<label
@@ -637,7 +649,7 @@
 			<Icon name="chevronDown" size={13} class="text-fg-3" />
 		</button>
 		{#if sortOpen}
-			<div class="menu absolute top-9 right-0 z-10 w-52" use:pop role="menu">
+			<div class="menu pop absolute top-9 right-0 z-10 w-52" role="menu">
 				<div
 					class="px-2.5 pt-1.5 pb-1 text-[11px] font-medium tracking-[0.06em] text-fg-3 uppercase"
 				>
@@ -759,11 +771,11 @@
 			{#if error}
 				<p class="text-danger">{error}</p>
 			{:else if searching}
-				<div use:reveal>
+				<div class="reveal">
 					{#each hits as e (e.path)}
 						{@const i = e.name.toLowerCase().indexOf(query.trim().toLowerCase())}
 						<div
-							class="grid h-13 grid-cols-[minmax(0,1fr)_90px_170px_36px] items-center gap-3 rounded-md border-t border-line px-2 hover:bg-surface-2 {on(
+							class="grid h-13 grid-cols-[minmax(0,1fr)_90px_170px_36px] items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto] hover:bg-surface-2 {on(
 								e
 							)
 								? 'bg-accent-soft hover:bg-accent-soft'
@@ -848,7 +860,7 @@
 						<h2 class="font-medium">
 							Folders <span class="font-normal text-fg-3">{folders.length}</span>
 						</h2>
-						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" use:reveal>
+						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each folders as e (e.path)}
 								<div
 									class="flex flex-col gap-3.5 rounded-lg border bg-surface p-3.5 hover:bg-surface-2 {on(
@@ -873,7 +885,7 @@
 						<h2 class="font-medium">
 							Files <span class="font-normal text-fg-3">{files.length}</span>
 						</h2>
-						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" use:reveal>
+						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each files as e (e.path)}
 								<div
 									class="flex flex-col overflow-hidden rounded-lg border bg-surface hover:bg-surface-2 {on(
@@ -916,7 +928,7 @@
 						{@render head('created', 'Created', 'hidden @4xl:flex')}
 						<div></div>
 					</div>
-					<div use:reveal>
+					<div class="reveal">
 						{#each rows as e (e.path)}{@render row(e)}{/each}
 					</div>
 				</section>
@@ -932,11 +944,8 @@
 					: a === 'delete'
 						? trashAll(picked)
 						: open(a, picked)}
-			onclose={() => (sel = [])}
+			onclose={() => sel.clear()}
 		/>
-	{:else if single}
-		{@const s = single}
-		<DetailsPanel e={s} onaction={(a) => act(a, s)} onclose={() => (sel = [])} />
 	{/if}
 </div>
 
@@ -946,7 +955,7 @@
 		items={viewable}
 		onchange={(e) => {
 			preview = e;
-			sel = [e.path];
+			select([e.path]);
 		}}
 		onclose={() => (preview = null)}
 		ondownload={() => preview && downloadAll([preview])}
@@ -956,80 +965,53 @@
 {#if menu}
 	{@const m = menu}
 	{@const one = m.items.length === 1 ? m.items[0] : null}
-	<div class="menu fixed z-10" style="left:{m.x}px;top:{m.y}px" use:pop role="menu">
+	<div
+		popover="manual"
+		class="menu pop fixed inset-auto m-0 text-fg"
+		{@attach at(m.x, m.y)}
+		role="menu"
+	>
 		{#if !m.items.length}
-			<button class="menu-item" onclick={() => open('mkdir', [])}>
-				<Icon name="folderPlus" size={15} class="text-fg-2" />New folder<kbd class="ml-auto"
-					>⇧{mod}N</kbd
-				>
-			</button>
-			<button class="menu-item" onclick={() => PickUploads(dir).then(queueConflicts)}>
-				<Icon name="upload" size={15} class="text-fg-2" />Upload files…<kbd class="ml-auto"
-					>{mod}U</kbd
-				>
-			</button>
-			<button class="menu-item" disabled={!clip} onclick={paste}>
-				<Icon name="copy" size={15} class="text-fg-2" />Paste{clip
-					? ` ${clip.items.length} ${clip.items.length === 1 ? 'item' : 'items'}`
-					: ''}<kbd class="ml-auto">{mod}V</kbd>
-			</button>
+			{@render item('folderPlus', 'New folder', () => open('mkdir', []), `⇧${mod}N`)}
+			{@render item(
+				'upload',
+				'Upload files…',
+				() => PickUploads(dir).then(queueConflicts),
+				`${mod}U`
+			)}
+			{@render item(
+				'copy',
+				`Paste${clip ? ` ${clip.items.length} ${clip.items.length === 1 ? 'item' : 'items'}` : ''}`,
+				paste,
+				`${mod}V`,
+				!clip
+			)}
 			<hr class="my-1 border-line" />
-			<button class="menu-item" onclick={() => (sel = shown.map((e) => e.path))}>
-				<Icon name="check" size={15} class="text-fg-2" />Select all<kbd class="ml-auto">{mod}A</kbd>
-			</button>
-			<button class="menu-item" onclick={refresh}>
-				<Icon name="refresh" size={15} class="text-fg-2" />Refresh<kbd class="ml-auto">{mod}R</kbd>
-			</button>
+			{@render item('check', 'Select all', () => select(shown.map((e) => e.path)), `${mod}A`)}
+			{@render item('refresh', 'Refresh', refresh, `${mod}R`)}
 		{:else}
+			{@const n = one ? '' : ` ${m.items.length} items`}
+			{#if one?.dir}
+				<a class="menu-item" href={filesHref(one.path)}
+					><Icon name="open" size={15} class="text-fg-2" />Open</a
+				>
+			{:else if one && previewKind(one.name)}
+				{@render item('eye', 'Preview', () => (preview = one))}
+			{/if}
+			{@render item('download', `Download${n}`, () => downloadAll(m.items))}
 			{#if one}
-				{#if one.dir}
-					<a class="menu-item" href={filesHref(one.path)}
-						><Icon name="open" size={15} class="text-fg-2" />Open</a
-					>
-				{:else if previewKind(one.name)}
-					<button class="menu-item" onclick={() => (preview = one)}>
-						<Icon name="eye" size={15} class="text-fg-2" />Preview
-					</button>
-				{/if}
-				<button class="menu-item" onclick={() => downloadAll([one])}>
-					<Icon name="download" size={15} class="text-fg-2" />Download
-				</button>
-				<button class="menu-item" onclick={() => open('rename', [one])}>
-					<Icon name="pencil" size={15} class="text-fg-2" />Rename
-				</button>
-				<button class="menu-item" onclick={() => copyLink(one)}>
-					<Icon name="link" size={15} class="text-fg-2" />Copy Link
-				</button>
-			{:else}
-				<button class="menu-item" onclick={() => downloadAll(m.items)}>
-					<Icon name="download" size={15} class="text-fg-2" />Download {m.items.length} items
-				</button>
+				{@render item('pencil', 'Rename', () => open('rename', [one]))}
+				{@render item('link', 'Copy Link', () => copyLink(one))}
 			{/if}
 			<hr class="my-1 border-line" />
-			<button class="menu-item" onclick={() => (clip = { items: m.items, cut: false })}>
-				<Icon name="copy" size={15} class="text-fg-2" />Copy<kbd class="ml-auto">{mod}C</kbd>
-			</button>
-			<button class="menu-item" onclick={() => (clip = { items: m.items, cut: true })}>
-				<Icon name="cut" size={15} class="text-fg-2" />Cut<kbd class="ml-auto">{mod}X</kbd>
-			</button>
-			{#if one}
-				<button class="menu-item" onclick={() => duplicate(one)}>
-					<Icon name="copy" size={15} class="text-fg-2" />Duplicate
-				</button>
-			{/if}
-			<button class="menu-item" onclick={() => open('copy', m.items)}>
-				<Icon name="folderMove" size={15} class="text-fg-2" />Copy{one
-					? ''
-					: ` ${m.items.length} items`} to…
-			</button>
-			<button class="menu-item" onclick={() => open('move', m.items)}>
-				<Icon name="folderMove" size={15} class="text-fg-2" />Move{one
-					? ''
-					: ` ${m.items.length} items`} to…
-			</button>
+			{@render item('copy', 'Copy', () => (clip = { items: m.items, cut: false }), `${mod}C`)}
+			{@render item('cut', 'Cut', () => (clip = { items: m.items, cut: true }), `${mod}X`)}
+			{#if one}{@render item('copy', 'Duplicate', () => duplicate(one))}{/if}
+			{@render item('folderMove', `Copy${n} to…`, () => open('copy', m.items))}
+			{@render item('folderMove', `Move${n} to…`, () => open('move', m.items))}
 			<hr class="my-1 border-line" />
 			<button class="menu-item text-danger" onclick={() => trashAll(m.items)}>
-				<Icon name="trash" size={15} />Move{one ? '' : ` ${m.items.length} items`} to Trash
+				<Icon name="trash" size={15} />Move{n} to Trash
 			</button>
 		{/if}
 	</div>

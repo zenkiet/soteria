@@ -1,8 +1,8 @@
-// Package wails is the inbound adapter: the one Wails service the frontend calls, its events, tray, dock badge,
-// notifications and window state. Every exported method on App is a binding, so helpers stay unexported.
+// Package wails is the inbound adapter; every exported method on App is a frontend binding, so helpers stay unexported.
 package wails
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -44,6 +44,12 @@ type App struct {
 	link    string
 }
 
+// Drop is a file drop: the local paths and, when they landed on a folder row, that folder.
+type Drop struct {
+	Files []string `json:"files"`
+	Dir   string   `json:"dir"`
+}
+
 // Events sends to the webview; app packages only see the interface.
 type Events struct{}
 
@@ -55,13 +61,12 @@ func (Events) Emit(name string, data any) {
 
 func init() {
 	application.RegisterEvent[domain.Transfer]("transfer")
-	application.RegisterEvent[[]string]("dropped")
+	application.RegisterEvent[Drop]("dropped")
 	application.RegisterEvent[bool]("dragend")
 	application.RegisterEvent[domain.IndexStatus]("index")
 	application.RegisterEvent[string]("nav")
 }
 
-// session
 func (a *App) Servers() ([]domain.Server, error)                          { return a.S.Servers() }
 func (a *App) Current() *domain.Server                                    { return a.S.Current() }
 func (a *App) Connect(s domain.Server, pw string) (*domain.Server, error) { return a.S.Connect(s, pw) }
@@ -71,16 +76,15 @@ func (a *App) SignOut()                                       { a.S.SignOut() }
 func (a *App) Disconnect()                                    { a.S.Disconnect() }
 func (a *App) Forget(id string) error                         { return a.S.Forget(id) }
 
-// files
-func (a *App) List(p string) ([]domain.Entry, error) { return a.F.List(p) }
-func (a *App) Quota() (domain.Quota, error)          { return a.F.Quota() }
-func (a *App) Mkdir(p string) error                  { return a.F.Mkdir(p) }
-func (a *App) Move(from, to string) error            { return a.F.Move(from, to) }
-func (a *App) Copy(from, to string) error            { return a.F.Copy(from, to) }
-func (a *App) Ping() error                           { return a.F.Ping() }
-func (a *App) Link(p string) (string, error)         { return a.F.Link(p) }
+func (a *App) List(ctx context.Context, p string) ([]domain.Entry, error) { return a.F.List(ctx, p) }
+func (a *App) Quota() (domain.Quota, error)                               { return a.F.Quota() }
+func (a *App) Mkdir(p string) error                                       { return a.F.Mkdir(p) }
+func (a *App) Move(from, to string) error                                 { return a.F.Move(from, to) }
 
-// transfers
+func (a *App) Copy(from, to string) error    { return a.F.Copy(from, to) }
+func (a *App) Ping() error                   { return a.F.Ping() }
+func (a *App) Link(p string) (string, error) { return a.F.Link(p) }
+
 func (a *App) Transfers() []domain.Transfer { return a.T.List() }
 func (a *App) Cancel(id string)             { a.T.Cancel(id) }
 func (a *App) CancelGroup(group string)     { a.T.CancelGroup(group) }
@@ -110,23 +114,20 @@ func (a *App) PickFolder() (string, error) {
 	return application.Get().Dialog.OpenFile().CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()
 }
 
-// trash
 func (a *App) Trash(p string) (string, error)         { return a.Tr.Trash(p) }
 func (a *App) ListTrash() ([]domain.TrashItem, error) { return a.Tr.List() }
 func (a *App) Restore(p string) error                 { return a.Tr.Restore(p) }
 func (a *App) Purge(p string) error                   { return a.Tr.Purge(p) }
 func (a *App) EmptyTrash() error                      { return a.Tr.Empty() }
 
-// search
-func (a *App) Reindex()                            { a.I.Reindex() }
-func (a *App) Indexed() domain.IndexStatus         { return a.I.Status() }
-func (a *App) Recent(n int) []domain.Entry         { return a.I.Recent(n) }
-func (a *App) FolderUsage(dir string) domain.Usage { return a.I.Usage(dir) }
+func (a *App) Reindex()                                        { a.I.Reindex() }
+func (a *App) Indexed() domain.IndexStatus                     { return a.I.Status() }
+func (a *App) Recent(n int) []domain.Entry                     { return a.I.Recent(n) }
+func (a *App) FolderUsages(dir string) map[string]domain.Usage { return a.I.Usages(dir) }
 func (a *App) Search(q string) []domain.Entry {
 	return a.I.Search(q)
 }
 
-// drive
 func (a *App) Drive() domain.Drive          { return a.M.Drive() }
 func (a *App) Mount() (domain.Drive, error) { return a.M.Mount() }
 func (a *App) Unmount() error               { return a.M.Unmount() }

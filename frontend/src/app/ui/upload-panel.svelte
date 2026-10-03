@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { Cancel, CancelGroup, Retry, transfers, type Transfer } from '@/shared/api';
-	import { bytes, filesHref, iconFor, parent, pop } from '@/shared/lib';
-	import { Dialog, Icon } from '@/shared/ui';
+	import { Cancel, CancelGroup, Retry, transfers, type Transfer } from '#/shared/api/index.ts';
+	import { bytes, filesHref, iconFor, parent } from '#/shared/lib/index.ts';
+	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	type Row = { key: string; name: string; dir: string; group: boolean; ts: Transfer[] };
 
@@ -20,22 +20,21 @@
 
 	const items = $derived(transfers.list.filter((t) => t.kind === 'upload' && !hidden.has(t.id)));
 	const rows = $derived.by(() => {
-		const out: Row[] = [];
+		const out: Record<string, Row> = {};
 		for (const t of items) {
 			const key = t.group || t.id;
-			const row = out.find((r) => r.key === key);
-			if (row) row.ts.push(t);
-			else if (t.group)
-				out.push({
-					key,
-					name: t.group.slice(t.group.lastIndexOf('/') + 1),
-					dir: t.group,
-					group: true,
-					ts: [t]
-				});
-			else out.push({ key, name: t.name, dir: parent(t.remote), group: false, ts: [t] });
+			out[key] ??= t.group
+				? {
+						key,
+						name: t.group.slice(t.group.lastIndexOf('/') + 1),
+						dir: t.group,
+						group: true,
+						ts: []
+					}
+				: { key, name: t.name, dir: parent(t.remote), group: false, ts: [] };
+			out[key].ts.push(t);
 		}
-		return out.sort((a, b) => rank[status(a.ts)] - rank[status(b.ts)]);
+		return Object.values(out).sort((a, b) => rank[status(a.ts)] - rank[status(b.ts)]);
 	});
 	const pending = $derived(items.filter(live).length);
 	const failed = $derived(items.filter((t) => t.status === 'error').length);
@@ -73,8 +72,7 @@
 
 {#if items.length}
 	<div
-		use:pop
-		class="absolute right-5 bottom-5 z-10 flex w-95 flex-col overflow-hidden rounded-[10px] border border-line bg-surface shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+		class="pop absolute right-5 bottom-5 z-10 flex w-95 flex-col overflow-hidden rounded-[10px] border border-line bg-surface shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
 	>
 		<div class="flex flex-col gap-2 py-2.5 pr-2 pl-3.5">
 			<div class="flex items-center gap-2.5">
@@ -105,9 +103,7 @@
 				>
 			</div>
 			{#if pending}
-				<div class="h-0.75 overflow-hidden rounded-full bg-surface-2">
-					<div class="h-full bg-accent" style="width:{total ? (done / total) * 100 : 0}%"></div>
-				</div>
+				<progress class="bar h-0.75" value={done} max={total || 1}></progress>
 			{/if}
 		</div>
 		{#if !collapsed}
@@ -132,12 +128,11 @@
 								</span>
 							</div>
 							{#if s === 'running'}
-								<div class="h-0.75 overflow-hidden rounded-full bg-surface-2">
-									<div
-										class="h-full bg-accent"
-										style="width:{(sum(r.ts, (x) => x.done) / sum(r.ts, (x) => x.total)) * 100}%"
-									></div>
-								</div>
+								<progress
+									class="bar h-0.75"
+									value={sum(r.ts, (x) => x.done)}
+									max={sum(r.ts, (x) => x.total) || 1}
+								></progress>
 							{/if}
 							<span class="truncate text-[11px] {s === 'error' ? 'text-danger' : 'text-fg-3'}"
 								>{sub(r)}</span

@@ -1,4 +1,4 @@
-import { InstallDriver, Mount } from '@bindings/soteria/internal/infra/wails/app';
+import { InstallDriver, Mount } from '#bindings/soteria/internal/infra/wails/app.ts';
 
 // connectDrive mounts the drive, installing the WinFsp driver first when Windows reports it missing.
 export async function connectDrive() {

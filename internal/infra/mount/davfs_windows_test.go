@@ -1,6 +1,7 @@
 package mount
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -13,7 +14,13 @@ import (
 
 func TestDavFS(t *testing.T) {
 	f := webdavtest.New(map[string]bool{"/": true, "/Docs": true}, map[string]string{"/Docs/a.txt": "hello world"})
-	srv := httptest.NewServer(f)
+	gets := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			gets++
+		}
+		f.ServeHTTP(w, r)
+	}))
 	defer srv.Close()
 	c, _ := webdav.New(domain.Server{URL: srv.URL, Username: "u"}, "p")
 	fs := newDavFS(New(func() (*webdav.Client, error) { return c, nil }, nil))
@@ -34,8 +41,11 @@ func TestDavFS(t *testing.T) {
 
 	errc, h := fs.Open("/Docs/a.txt", fuse.O_RDONLY)
 	buf := make([]byte, 5)
-	if errc != 0 || fs.Read("/Docs/a.txt", buf, 6, h) != 5 || string(buf) != "world" {
+	if errc != 0 || fs.Read("/Docs/a.txt", buf, 0, h) != 5 || string(buf) != "hello" {
 		t.Fatalf("range read: %d %q", errc, buf)
+	}
+	if fs.Read("/Docs/a.txt", buf, 6, h) != 5 || string(buf) != "world" || gets != 1 {
+		t.Fatalf("read-ahead: %q after %d GETs", buf, gets)
 	}
 	fs.Release("/Docs/a.txt", h)
 

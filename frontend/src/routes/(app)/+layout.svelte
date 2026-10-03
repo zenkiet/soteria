@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Shell } from '@/app/ui';
+	import { Shell } from '#/app/ui/index.ts';
 
 	let { data, children } = $props();
 </script>

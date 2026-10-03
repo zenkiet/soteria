@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"soteria/internal/domain"
@@ -39,7 +41,8 @@ func transfers(s *Session) *Transfers { return NewTransfers(s, NewIndex(s, noEve
 
 func TestSearch(t *testing.T) {
 	idx := NewIndex(&Session{}, noEvents{})
-	idx.entries = []domain.Entry{{Name: "Photos", Path: "/Photos", Dir: true}, {Name: "cat.png", Path: "/Photos/cat.png"}, {Name: "notes.txt", Path: "/notes.txt"}}
+	idx.entries = map[string]item{}
+	idx.Put(domain.Entry{Name: "Photos", Path: "/Photos", Dir: true}, domain.Entry{Name: "cat.png", Path: "/Photos/cat.png", Size: 5}, domain.Entry{Name: "notes.txt", Path: "/notes.txt"})
 	if got := idx.Search("CAT"); len(got) != 1 || got[0].Path != "/Photos/cat.png" {
 		t.Fatalf("search: %+v", got)
 	}
@@ -48,6 +51,19 @@ func TestSearch(t *testing.T) {
 	}
 	if got := idx.Recent(5); len(got) != 2 {
 		t.Fatalf("recent skips folders: %+v", got)
+	}
+	if u := idx.Usages("/"); len(u) != 1 || u["/Photos"] != (domain.Usage{Known: true, Items: 1, Bytes: 5}) {
+		t.Fatalf("usages: %+v", u)
+	}
+	idx.Put(domain.Entry{Name: "Tài liệu Đà Nẵng.docx", Path: "/Tài liệu Đà Nẵng.docx"})
+	if got := idx.Search("tai lieu da nang"); len(got) != 1 {
+		t.Fatalf("accent-insensitive search: %+v", got)
+	}
+	idx.Remove("/Tài liệu Đà Nẵng.docx")
+	idx.Move("/Photos", "/Pics", false)
+	idx.Remove("/notes.txt")
+	if got := idx.Search("cat"); len(got) != 1 || got[0].Path != "/Pics/cat.png" || len(idx.entries) != 2 {
+		t.Fatalf("after move/remove: %+v", idx.entries)
 	}
 }
 
@@ -87,9 +103,9 @@ func TestRetryKeepsID(t *testing.T) {
 	c, _ := s.Client()
 	tr := transfers(s)
 	missing := filepath.Join(t.TempDir(), "missing")
-	id := tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Local: missing, Remote: "/x"}, upload(c, missing, "/x", 0))
+	id := tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Local: missing, Remote: "/x"}, upload(c, missing, "/x", 0)).ID
 	wait := func() domain.Transfer {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			if ts := tr.List(); len(ts) == 1 && ts[0].Status == "error" {
 				return ts[0]
 			}
@@ -107,29 +123,65 @@ func TestRetryKeepsID(t *testing.T) {
 	}
 }
 
-func TestEnqueueRetriesNetworkErrors(t *testing.T) {
+func TestEnqueueRetriesNetworkErrors(t *testing.T) { synctest.Test(t, testEnqueueRetries) }
+
+// The synctest bubble makes the 2 s and 4 s backoffs instant.
+func testEnqueueRetries(t *testing.T) {
 	tr := transfers(session(t, "http://127.0.0.1:0"))
 	tries := 0
 	var changes []string
 	tr.OnChange = func(status, _ string) { changes = append(changes, status) }
-	tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Total: 3}, func(ctx context.Context, progress func(int64)) error {
+	err := <-tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Total: 3}, func(ctx context.Context, progress func(int64)) error {
 		tries++
 		if tries < 3 {
 			return errors.New("connection reset")
 		}
 		progress(3)
 		return nil
-	})
-	for i := 0; i < 200; i++ {
-		if ts := tr.List(); ts[0].Status == "done" {
-			if tries != 3 || ts[0].Done != 3 || strings.Join(changes, ",") != "queued,done" {
-				t.Fatalf("tries=%d %+v changes=%v", tries, ts[0], changes)
-			}
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+	}).done
+	if ts := tr.List(); err != nil || tries != 3 || ts[0].Status != "done" || ts[0].Done != 3 || strings.Join(changes, ",") != "queued,done" {
+		t.Fatalf("err=%v tries=%d %+v changes=%v", err, tries, ts[0], changes)
 	}
-	t.Fatalf("never finished: %+v", tr.List())
+}
+
+func TestFetchResumes(t *testing.T) {
+	const body = "0123456789"
+	var ranges []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		w.Header().Set("ETag", `"v1"`)
+		if r.Header.Get("Range") == "" {
+			w.Header().Set("Content-Length", "10")
+			_, _ = io.WriteString(w, body[:4])
+			_ = http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler)
+		}
+		http.ServeContent(w, r, "", time.Time{}, strings.NewReader(body))
+	}))
+	defer srv.Close()
+	c, _ := session(t, srv.URL).Client()
+	local := filepath.Join(t.TempDir(), "f")
+	run := fetch(c, "/f", local)
+	if err := run(context.Background(), func(int64) {}); err == nil {
+		t.Fatal("the first attempt should fail mid-body")
+	}
+	if err := run(context.Background(), func(int64) {}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(local); string(b) != body || ranges[1] != "bytes=4-" {
+		t.Fatalf("got %q after ranges %q", b, ranges)
+	}
+}
+
+func TestLocalName(t *testing.T) {
+	for _, bad := range []string{"..", "../evil", "/etc/passwd", ""} {
+		if _, err := localName(bad); err == nil {
+			t.Fatalf("%q escapes the download folder", bad)
+		}
+	}
+	if p, err := localName("a/b.txt"); err != nil || p != filepath.Join("a", "b.txt") {
+		t.Fatalf("localName: %q %v", p, err)
+	}
 }
 
 func TestTrashRestore(t *testing.T) {
@@ -144,7 +196,7 @@ func TestTrashRestore(t *testing.T) {
 	if err != nil || !strings.HasPrefix(trashed, "/.trash/") || f.Files["/Reports/a.pdf"] != "" {
 		t.Fatalf("trash: %v %s", err, trashed)
 	}
-	if root, _ := files.List("/"); slices.ContainsFunc(root, func(e domain.Entry) bool { return e.Name == ".trash" }) {
+	if root, _ := files.List(context.Background(), "/"); slices.ContainsFunc(root, func(e domain.Entry) bool { return e.Name == ".trash" }) {
 		t.Fatal(".trash must stay hidden from listings")
 	}
 	items, err := trash.List()

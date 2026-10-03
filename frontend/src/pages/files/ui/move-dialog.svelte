@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { List, type Entry } from '@/shared/api';
-	import { parent } from '@/shared/lib';
-	import { Dialog, Icon } from '@/shared/ui';
+	import { List, type Entry } from '#/shared/api/index.ts';
+	import { parent } from '#/shared/lib/index.ts';
+	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	let {
 		items,

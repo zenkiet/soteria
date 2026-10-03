@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
-	"strconv"
 	"sync"
 	"time"
 
@@ -57,7 +57,7 @@ func (s *Session) Connect(sv domain.Server, password string) (*domain.Server, er
 		return nil, err
 	}
 	if sv.ID == "" {
-		sv.ID = strconv.FormatInt(time.Now().UnixNano(), 36)
+		sv.ID = rand.Text()
 	}
 	if sv.Name == "" {
 		sv.Name = c.Base.Host

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { EmptyTrash, ListTrash, Purge, Restore, type TrashItem } from '@/shared/api';
-	import { bytes, filesHref, iconFor, msg, reveal, toast, when } from '@/shared/lib';
-	import { Dialog, Icon } from '@/shared/ui';
+	import { EmptyTrash, ListTrash, Purge, Restore, type TrashItem } from '#/shared/api/index.ts';
+	import { bytes, filesHref, iconFor, msg, toast, when } from '#/shared/lib/index.ts';
+	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
-	let items = $state<TrashItem[]>([]);
+	let items = $state.raw<TrashItem[]>([]);
 	let loading = $state(true);
 	let confirm = $state(false);
 
@@ -34,10 +34,7 @@
 	}
 </script>
 
-<header
-	class="flex h-13 shrink-0 items-center gap-3 border-b border-line px-5"
-	style="--wails-draggable: drag"
->
+<header class="page-header">
 	<h1 class="text-[15px] font-semibold tracking-tight">Trash</h1>
 	<div class="flex-1"></div>
 	<button class="btn btn-danger" disabled={!items.length} onclick={() => (confirm = true)}>
@@ -69,7 +66,7 @@
 				<div class="text-right">Size</div>
 				<div></div>
 			</div>
-			<div use:reveal>
+			<div class="reveal">
 				{#each items as t (t.path)}
 					<div
 						class="group grid h-11 items-center gap-3 rounded-md border-t border-line px-2 hover:bg-surface-2 {cols}"

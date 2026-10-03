@@ -1,21 +1,20 @@
 <script module lang="ts">
-	let tried = false; // module scope: reconnect at launch, not every time this page is shown
+	// Module scope: reconnect at launch, not every time this page is shown.
+	let tried = false;
 </script>
 
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ConnectSaved, DeepLink, Forget, Servers, type Server } from '@/shared/api';
-	import { msg, prefs, reveal, toast } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
-	import { System } from '@wailsio/runtime';
+	import { ConnectSaved, DeepLink, Forget, Servers, type Server } from '#/shared/api/index.ts';
+	import { mac, msg, prefs, toast, windows } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	let servers = $state<Server[]>([]);
 	let busy = $state('');
 	Servers().then((l) => {
 		servers = l ?? [];
-		// The list is most-recent-first. Reconnecting fails when no password was kept, and the list
-		// is then the right thing to be looking at, so the error stays quiet.
+		// Most recent first; without a kept password reconnecting fails quietly and this list is the right screen.
 		if (prefs.reconnect && !tried && servers.length) {
 			tried = true;
 			reconnect(servers[0]);
@@ -58,15 +57,15 @@
 			<div>
 				<h1 class="text-[22px] font-semibold tracking-tight">Choose a server</h1>
 				<p class="mt-1.5 text-fg-2">
-					{System.IsMac()
+					{mac
 						? 'Connections saved on this Mac. Passwords stay in the Keychain.'
-						: System.IsWindows()
+						: windows
 							? 'Connections saved on this PC. Passwords are stored encrypted for your Windows account.'
 							: 'Connections saved on this computer.'}
 				</p>
 			</div>
 			{#if servers.length}
-				<div class="divide-y divide-line rounded-lg border border-line bg-surface" use:reveal>
+				<div class="reveal divide-y divide-line rounded-lg border border-line bg-surface">
 					{#each servers as s (s.id)}
 						<div class="flex items-center gap-2 py-3.5 pr-3 pl-4">
 							<button

@@ -17,8 +17,7 @@ import (
 	"soteria/internal/infra/webdav"
 )
 
-// davFS exposes the WebDAV tree to WinFsp. Reads are HTTP Range requests; a file opened for
-// writing is staged in a temp file and PUT once when it is closed, since WebDAV can't write in place.
+// WebDAV can't write in place, so a file opened for writing is staged in a temp file and PUT when closed.
 type davFS struct {
 	fuse.FileSystemBase
 	m     *Mounter
@@ -40,7 +39,13 @@ type fh struct {
 	size  int64
 	tmp   *os.File
 	dirty bool
+	mu    sync.Mutex
+	// ahead is the read-ahead window starting at offset at.
+	ahead []byte
+	at    int64
 }
+
+const readAhead = 1 << 20
 
 var bg = context.Background()
 
@@ -49,11 +54,10 @@ func newDavFS(m *Mounter) *davFS {
 }
 
 func errno(err error) int {
-	var de *domain.DavError
 	if err == nil {
 		return 0
 	}
-	if errors.As(err, &de) {
+	if de, ok := errors.AsType[*domain.DavError](err); ok {
 		switch de.Code {
 		case http.StatusNotFound:
 			return -fuse.ENOENT
@@ -145,7 +149,6 @@ func (f *davFS) handle(id uint64) *fh {
 	return f.fhs[id]
 }
 
-// mutate runs a server change, drops the cached listing around p and re-indexes.
 func (f *davFS) mutate(p string, op func(*webdav.Client) error) int {
 	cl, err := f.m.client()
 	if err != nil {
@@ -271,24 +274,30 @@ func (f *davFS) Read(p string, buf []byte, ofst int64, fhid uint64) int {
 	if ofst >= h.size {
 		return 0
 	}
-	end := min(ofst+int64(len(buf)), h.size) - 1
-	cl, err := f.m.client()
-	if err != nil {
-		return -fuse.EIO
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if ofst < h.at || min(ofst+int64(len(buf)), h.size) > h.at+int64(len(h.ahead)) {
+		end := min(ofst+max(int64(len(buf)), readAhead), h.size) - 1
+		cl, err := f.m.client()
+		if err != nil {
+			return -fuse.EIO
+		}
+		resp, err := cl.Do(bg, http.MethodGet, p, nil, 0, "Range", fmt.Sprintf("bytes=%d-%d", ofst, end))
+		if err != nil {
+			return errno(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusPartialContent && ofst > 0 {
+			return -fuse.EIO
+		}
+		data := make([]byte, end-ofst+1)
+		n, err := io.ReadFull(resp.Body, data)
+		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+			return -fuse.EIO
+		}
+		h.ahead, h.at = data[:n], ofst
 	}
-	resp, err := cl.Do(bg, http.MethodGet, p, nil, 0, "Range", fmt.Sprintf("bytes=%d-%d", ofst, end))
-	if err != nil {
-		return errno(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent && ofst > 0 {
-		return -fuse.EIO
-	}
-	n, err := io.ReadFull(resp.Body, buf[:end-ofst+1])
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return -fuse.EIO
-	}
-	return n
+	return copy(buf, h.ahead[ofst-h.at:])
 }
 
 func (f *davFS) Write(p string, buf []byte, ofst int64, fhid uint64) int {
@@ -324,19 +333,24 @@ func (f *davFS) Release(p string, fhid uint64) int {
 	if h == nil || h.tmp == nil {
 		return 0
 	}
-	defer os.Remove(h.tmp.Name())
-	defer h.tmp.Close()
-	if !h.dirty {
-		return 0
-	}
+	name := h.tmp.Name()
 	fi, err := h.tmp.Stat()
-	if err != nil {
-		return -fuse.EIO
+	rc := 0
+	if h.dirty && err == nil {
+		if _, err = h.tmp.Seek(0, io.SeekStart); err == nil {
+			rc = f.mutate(h.path, func(c *webdav.Client) error { return c.Put(bg, h.path, h.tmp, fi.Size()) })
+		}
 	}
-	if _, err := h.tmp.Seek(0, io.SeekStart); err != nil {
+	h.tmp.Close()
+	switch {
+	case err != nil:
 		return -fuse.EIO
+	case rc != 0 && f.m.Adopt != nil:
+		f.m.Adopt(name, h.path, fi.Size())
+	case rc == 0:
+		os.Remove(name)
 	}
-	return f.mutate(h.path, func(c *webdav.Client) error { return c.Put(bg, h.path, h.tmp, fi.Size()) })
+	return rc
 }
 
 func (f *davFS) Mkdir(p string, mode uint32) int {

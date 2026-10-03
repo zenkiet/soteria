@@ -15,9 +15,9 @@ type DavError struct {
 
 func (e *DavError) Error() string { return e.Text }
 
-// Retryable: network trouble (stall, reset, unreachable) is worth another try; server answers and local file errors are not.
+// Retryable reports whether err is network trouble worth another try; server answers and local file errors are not.
 func Retryable(err error) bool {
-	var de *DavError
-	var pe *fs.PathError
-	return err != nil && !errors.As(err, &de) && !errors.As(err, &pe)
+	_, dav := errors.AsType[*DavError](err)
+	_, local := errors.AsType[*fs.PathError](err)
+	return err != nil && !dav && !local
 }

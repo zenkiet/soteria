@@ -77,7 +77,7 @@ func (m *Mounter) Mount() (domain.Drive, error) {
 		done <- host.Mount(letter+":", []string{"-o", "volname=Soteria", "-o", "uid=-1", "-o", "gid=-1", "--FileSystemName=Soteria"})
 	}()
 	root := letter + `:\`
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		select {
 		case <-done:
 			return domain.Drive{}, errors.New("couldn't mount the drive, WinFsp refused it")
@@ -105,7 +105,7 @@ func (m *Mounter) Unmount() error {
 	if !host.Unmount() {
 		return errors.New("couldn't disconnect Soteria, close files that are still open and try again")
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if _, err := os.Stat(letter + `:\`); err != nil {
 			break
 		}
@@ -148,7 +148,7 @@ func (m *Mounter) InstallDriver() error {
 	if err := windows.ShellExecute(0, verb, exe, args, nil, windows.SW_HIDE); err != nil {
 		return fmt.Errorf("installing WinFsp was cancelled: %w", err)
 	}
-	for i := 0; i < 600; i++ {
+	for range 600 {
 		if driverInstalled() {
 			return nil
 		}

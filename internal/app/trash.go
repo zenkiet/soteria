@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"io"
 	"path"
 	"slices"
@@ -13,17 +14,10 @@ import (
 	"soteria/internal/infra/webdav"
 )
 
-// Trash keeps deletes recoverable: /.trash/<stamp>/<name> plus a .origin file naming the folder it came from.
+// Trash keeps deletes recoverable: /.trash/<stamp>-<rand>/<name> plus a .origin file naming the folder it came from.
 type Trash struct {
 	S     *Session
 	Index *Index
-}
-
-func (t *Trash) changed(err error) error {
-	if err == nil {
-		t.Index.ReindexLater()
-	}
-	return err
 }
 
 // Trash moves p into the trash and returns the new path.
@@ -33,7 +27,7 @@ func (t *Trash) Trash(p string) (string, error) {
 		return "", err
 	}
 	ctx := context.Background()
-	bin := path.Join(domain.TrashDir, strconv.FormatInt(time.Now().UnixNano(), 36))
+	bin := path.Join(domain.TrashDir, strconv.FormatInt(time.Now().UnixNano(), 36)+"-"+rand.Text()[:6])
 	_ = c.Mkcol(ctx, domain.TrashDir)
 	if err := c.Mkcol(ctx, bin); err != nil {
 		return "", err
@@ -43,7 +37,11 @@ func (t *Trash) Trash(p string) (string, error) {
 		return "", err
 	}
 	to := path.Join(bin, path.Base(p))
-	return to, t.changed(c.Move(ctx, p, to))
+	if err := c.Move(ctx, p, to); err != nil {
+		return "", err
+	}
+	t.Index.Remove(p)
+	return to, nil
 }
 
 func origin(ctx context.Context, c *webdav.Client, bin string) string {
@@ -56,8 +54,7 @@ func origin(ctx context.Context, c *webdav.Client, bin string) string {
 	return string(b)
 }
 
-// List returns trashed items newest first.
-// ponytail: one LIST + one GET per item; batch via PROPFIND infinity if trashes grow past a few hundred.
+// List returns trashed items newest first; ponytail: one LIST + GET per item, batch via PROPFIND infinity past a few hundred.
 func (t *Trash) List() ([]domain.TrashItem, error) {
 	c, err := t.S.Client()
 	if err != nil {
@@ -71,7 +68,7 @@ func (t *Trash) List() ([]domain.TrashItem, error) {
 	}
 	out := []domain.TrashItem{}
 	for _, bin := range bins {
-		stamp, err := strconv.ParseInt(bin.Name, 36, 64)
+		stamp, err := binTime(bin.Name)
 		if err != nil || !bin.Dir {
 			continue
 		}
@@ -81,7 +78,7 @@ func (t *Trash) List() ([]domain.TrashItem, error) {
 		}
 		for _, e := range items {
 			if e.Name != ".origin" {
-				out = append(out, domain.TrashItem{Entry: e, From: origin(ctx, c, bin.Path), Deleted: time.Unix(0, stamp)})
+				out = append(out, domain.TrashItem{Entry: e, From: origin(ctx, c, bin.Path), Deleted: stamp})
 			}
 		}
 	}
@@ -106,7 +103,9 @@ func (t *Trash) Restore(p string) error {
 	if err := c.Move(ctx, p, to); err != nil {
 		return err
 	}
-	return t.changed(c.Remove(ctx, bin))
+	// The trash is never indexed, so the restored subtree has to be crawled.
+	t.Index.ReindexLater()
+	return c.Remove(ctx, bin)
 }
 
 // Purge deletes one trashed item for good.
@@ -131,8 +130,15 @@ func (t *Trash) Sweep(c *webdav.Client) {
 	ctx := context.Background()
 	bins, _ := c.List(ctx, domain.TrashDir)
 	for _, bin := range bins {
-		if stamp, err := strconv.ParseInt(bin.Name, 36, 64); err == nil && time.Since(time.Unix(0, stamp)) > 30*24*time.Hour {
+		if stamp, err := binTime(bin.Name); err == nil && time.Since(stamp) > 30*24*time.Hour {
 			_ = c.Remove(ctx, bin.Path)
 		}
 	}
+}
+
+// Bins from before 0.6 have no random suffix.
+func binTime(name string) (time.Time, error) {
+	stamp, _, _ := strings.Cut(name, "-")
+	n, err := strconv.ParseInt(stamp, 36, 64)
+	return time.Unix(0, n), err
 }

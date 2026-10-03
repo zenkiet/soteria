@@ -8,9 +8,9 @@
 		Transfers,
 		transfers,
 		type Transfer
-	} from '@/shared/api';
-	import { bytes } from '@/shared/lib';
-	import { Icon } from '@/shared/ui';
+	} from '#/shared/api/index.ts';
+	import { bytes, fileManager } from '#/shared/lib/index.ts';
+	import { Icon } from '#/shared/ui/index.ts';
 
 	const live = (t: Transfer) => t.status === 'running' || t.status === 'queued';
 	const active = $derived(transfers.list.filter(live));
@@ -42,9 +42,7 @@
 					{all.filter((t) => t.status === 'done').length} / {all.length} files
 				</span>
 			</div>
-			<div class="h-1 overflow-hidden rounded-full bg-surface-2">
-				<div class="h-full bg-accent" style="width:{total ? (done / total) * 100 : 0}%"></div>
-			</div>
+			<progress class="bar h-1" value={done} max={total || 1}></progress>
 			<div class="text-xs text-fg-3">{bytes(done)} of {bytes(total)}</div>
 		</div>
 		<button class="btn" onclick={() => CancelGroup(g)}>Cancel all</button>
@@ -66,9 +64,7 @@
 		</div>
 		{#if t.status === 'running'}
 			<div class="flex flex-col gap-1.5">
-				<div class="h-1 overflow-hidden rounded-full bg-surface-2">
-					<div class="h-full bg-accent" style="width:{pct(t)}%"></div>
-				</div>
+				<progress class="bar h-1" value={pct(t)} max="100"></progress>
 				<div class="flex justify-between font-mono text-[11px] text-fg-3">
 					<span>{pct(t)}%</span><span>{bytes(t.done)} of {bytes(t.total)}</span>
 				</div>
@@ -89,7 +85,7 @@
 				</button>
 			{:else if t.status === 'done' && t.kind === 'download'}
 				<button class="text-xs text-accent-fg hover:underline" onclick={() => Reveal(t.local)}>
-					Show in Finder
+					Show in {fileManager}
 				</button>
 			{:else if t.status !== 'done'}<button
 					class="text-xs font-medium text-accent-fg hover:underline"
@@ -99,10 +95,7 @@
 	</div>
 {/snippet}
 
-<header
-	class="flex h-13 shrink-0 items-center gap-3 border-b border-line px-5"
-	style="--wails-draggable: drag"
->
+<header class="page-header">
 	<h1 class="text-[15px] font-semibold tracking-tight">Transfers</h1>
 	<span class="text-xs text-fg-3">Transfers can't be paused. Cancel and retry instead.</span>
 	<div class="flex-1"></div>

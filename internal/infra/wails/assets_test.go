@@ -18,7 +18,8 @@ func TestPreviewProxy(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "image/png")
+		// Ignored: the type comes from the extension.
+		w.Header().Set("Content-Type", "text/html")
 		w.Header().Set("Accept-Ranges", "bytes")
 		if r.Header.Get("Range") == "bytes=0-3" {
 			w.Header().Set("Content-Range", "bytes 0-3/14")
