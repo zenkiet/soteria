@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.6.0](https://github.com/zenkiet/soteria/compare/b73510053def69c4f194283cfd92b5c221cbf14f..v0.6.0) - 2026-10-03
+#### 🚀 Features
+- (**core**) ✨ migrate to SvelteKit 3, harden security and speed up - ([b735100](https://github.com/zenkiet/soteria/commit/b73510053def69c4f194283cfd92b5c221cbf14f)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.5.0](https://github.com/zenkiet/soteria/compare/7c5906ec929a9efbddcdedcada470895ecc9d689..v0.5.0) - 2026-09-16
 #### 🚀 Features
 - ✨ implement check for update for tray - ([49df17d](https://github.com/zenkiet/soteria/commit/49df17d4c8173057fe4284e5eb35e25662020130)) - [@zenkiet](https://github.com/zenkiet)
