@@ -10,14 +10,18 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/github/license/zenkiet/soteria?color=1B1A17&label=license"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/zenkiet/soteria?color=1B1A17&label=license"></a>
   <a href="https://github.com/zenkiet/soteria/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/zenkiet/soteria?include_prereleases&label=release&color=2E64C8"></a>
   <img alt="Platforms: macOS and Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-1B1A17">
   <a href="https://wails.io"><img alt="Built with Wails v3" src="https://img.shields.io/badge/Wails-v3-DF0000?logo=wails&logoColor=white"></a>
-  <a href="https://go.dev"><img alt="Go 1.27" src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white"></a>
+  <a href="https://go.dev"><img alt="Go 1.27" src="https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white"></a>
   <a href="https://svelte.dev"><img alt="Svelte 5" src="https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white"></a>
   <a href="#contributing"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-3B7A45"></a>
 </p>
+
+https://github.com/user-attachments/assets/a0013b84-528a-41df-9755-811360f14963
+
+<p align="center"><sub><a href="https://youtu.be/pcUr2bylSbc">Watch on YouTube</a> in full quality.</sub></p>
 
 <p align="center">
   <img src=".github/assets/hero.png" alt="Soteria running on the desktop, shown in light and dark mode side by side" width="100%">
@@ -73,11 +77,14 @@ The name comes from the Greek spirit of safety and deliverance. That is the whol
 And the everyday details:
 
 - **Search everything.** Type a name and get results from the whole server, not just the current folder.
+- **Drop onto a folder.** Drag files from Finder or File Explorer onto any folder in the list or grid and they upload straight into it.
 - **Previews and thumbnails.** Images, PDFs, video, audio, text and Word documents open in place. Card view shows real thumbnails.
-- **Copy, move, duplicate, rename.** With conflict handling that asks instead of overwriting.
+- **Copy, move, duplicate, rename.** Nothing is silently overwritten; an upload whose name already exists asks you what to do.
 - **Keyboard first.** Arrow keys, Space to preview, standard shortcuts for copy, paste, new folder, refresh and select all.
-- **Two themes, two platforms.** Light and dark follow the system or your choice. Native window controls on macOS and Windows.
+- **Two themes, two platforms.** Light and dark follow the system or your choice. Native window controls on macOS, the same traffic lights on Windows.
 - **Storage at a glance.** The sidebar shows how much of your quota is used and warns when it runs low.
+- **Links to any file or folder.** *Copy Link* gives a `soteria://` link; opening it brings Soteria to that folder with the file selected, waiting for you to sign in first if needed.
+- **Updates itself.** Soteria checks for new releases in the background, downloads and verifies them, and asks you to restart when the update is ready. Running from the disk image or Program Files, it points you to the new installer instead. Turn it off in Settings.
 
 ## Download
 
@@ -89,7 +96,7 @@ Soteria is in active development. Builds for each release are on the [Releases](
 | macOS 12 or later, Intel | `Soteria-<version>-macOS-intel.dmg` | Same app, built for Intel Macs. |
 | Windows 10 and 11, x64 | `Soteria-<version>-Windows-x64-Setup.exe` or the portable `.zip` | The network drive needs [WinFsp](https://winfsp.dev); Soteria offers to install it the first time you turn the drive on. |
 
-First run: choose **Add server**, enter the WebDAV address, your username and password, and tick **Remember me** to keep the password in the macOS Keychain or the Windows credential store.
+First run: choose **Add server**, enter the WebDAV address, your username and password, and tick **Remember me** to keep the password in the macOS Keychain or, on Windows, encrypted for your account.
 
 ## Works with
 
@@ -100,8 +107,8 @@ Storage quota is shown whenever the server reports it; with SFTPGo the numbers c
 ## Privacy
 
 - Your files travel directly between your computer and your server. There is no relay and no account with us.
-- Passwords live in the macOS Keychain or the Windows credential store, never in a plain file.
-- Soteria collects no analytics and makes no network requests other than to the server you configured.
+- Passwords live in the macOS Keychain or, on Windows, encrypted for your account with DPAPI; never in plain text.
+- Soteria collects no analytics. Besides your server, it only contacts GitHub to check for updates, which you can turn off in Settings.
 
 ## Roadmap
 
@@ -110,7 +117,6 @@ Planned, in rough order:
 - Share links for servers that support them
 - Pinned folders in the sidebar
 - Trash for files deleted through the network drive
-- Automatic updates
 - Linux
 
 Ideas and votes belong in [Issues](https://github.com/zenkiet/soteria/issues).
@@ -125,7 +131,7 @@ cd soteria/frontend && pnpm install && cd ..
 wails3 dev
 ```
 
-You need Go 1.25, Node 26 with pnpm, and the `wails3` CLI. `wails3 package` produces the installers.
+You need Go 1.27, Node 26 with pnpm, and the `wails3` CLI. `wails3 package` produces the installers.
 
 ## Contributing
 
