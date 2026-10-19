@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.7.0](https://github.com/zenkiet/soteria/compare/38b19e98f0286230edac2646624fcad36444ceaa..v0.7.0) - 2026-10-19
+#### 🚀 Features
+- (**core**) ✨ drag folders out, fix transfer edge cases and slim the codebase - ([46baa21](https://github.com/zenkiet/soteria/commit/46baa2112f3482e4e7db2acab394095ff6041871)) - [@zenkiet](https://github.com/zenkiet)
+#### 📝 Documentation
+- 📝 update README - ([38b19e9](https://github.com/zenkiet/soteria/commit/38b19e98f0286230edac2646624fcad36444ceaa)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.6.0](https://github.com/zenkiet/soteria/compare/b73510053def69c4f194283cfd92b5c221cbf14f..v0.6.0) - 2026-10-03
 #### 🚀 Features
 - (**core**) ✨ migrate to SvelteKit 3, harden security and speed up - ([b735100](https://github.com/zenkiet/soteria/commit/b73510053def69c4f194283cfd92b5c221cbf14f)) - [@zenkiet](https://github.com/zenkiet)
