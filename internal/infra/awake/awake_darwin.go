@@ -8,7 +8,7 @@ package awake
 
 static id<NSObject> activity;
 
-static void hold(int on) {
+static void hold(bool on) {
 	if (on && !activity) {
 		activity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiated reason:@"Transferring files"];
 	} else if (!on && activity) {
@@ -27,9 +27,5 @@ var mu sync.Mutex
 func Hold(on bool) {
 	mu.Lock()
 	defer mu.Unlock()
-	if on {
-		C.hold(1)
-	} else {
-		C.hold(0)
-	}
+	C.hold(C.bool(on))
 }

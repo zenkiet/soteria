@@ -18,16 +18,13 @@
 	} = $props();
 
 	const id = $props.id();
-	let el: HTMLDialogElement;
-
-	$effect(() => {
-		if (open && !el.open) el.showModal();
-		else if (!open && el.open) el.close();
-	});
 </script>
 
 <dialog
-	bind:this={el}
+	{@attach (d) => {
+		if (open && !d.open) d.showModal();
+		else if (!open && d.open) d.close();
+	}}
 	{onclose}
 	aria-labelledby={id}
 	class="m-auto w-100 rounded-[10px] border border-line bg-surface p-5 text-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] backdrop:bg-black/35 backdrop:backdrop-blur-sm"

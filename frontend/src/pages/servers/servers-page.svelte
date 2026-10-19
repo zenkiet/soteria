@@ -17,29 +17,18 @@
 		// Most recent first; without a kept password reconnecting fails quietly and this list is the right screen.
 		if (prefs.reconnect && !tried && servers.length) {
 			tried = true;
-			reconnect(servers[0]);
+			pick(servers[0], true);
 		}
 	});
 
-	async function reconnect(s: Server) {
+	async function pick(s: Server, auto = false) {
 		busy = s.id;
 		try {
 			await ConnectSaved(s.id);
-			if (page.route.id === '/') await goto((await DeepLink()) || '/files');
+			if (!auto || page.route.id === '/') await goto((await DeepLink()) || '/files');
 		} catch (e) {
 			if (!msg(e).includes('password required')) toast(msg(e), 'error');
-		}
-		busy = '';
-	}
-
-	async function pick(s: Server) {
-		busy = s.id;
-		try {
-			await ConnectSaved(s.id);
-			await goto((await DeepLink()) || '/files');
-		} catch (e) {
-			if (msg(e).includes('password required')) await goto(`/sign-in?id=${s.id}`);
-			else toast(msg(e), 'error');
+			else if (!auto) await goto(`/sign-in?id=${s.id}`);
 		}
 		busy = '';
 	}

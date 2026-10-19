@@ -32,6 +32,27 @@ func CacheDir() string {
 
 func ThumbDir() string { return filepath.Join(CacheDir(), "thumbs") }
 
+func IndexFile(id string) string { return filepath.Join(CacheDir(), "index-"+id+".gob") }
+
+// WriteFile swaps name in whole so a crash never leaves it torn.
+func WriteFile(name string, b []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(name), "*.tmp")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), name)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
+}
+
 func serversFile() string { return filepath.Join(Dir(), "servers.json") }
 
 func LoadServers() ([]domain.Server, error) {
@@ -54,7 +75,7 @@ func writeServers(list []domain.Server) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(list, "", "  ")
-	return os.WriteFile(serversFile(), b, 0o600)
+	return WriteFile(serversFile(), b)
 }
 
 func SaveServer(s domain.Server) error {
@@ -71,6 +92,7 @@ func RemoveServer(id string) error {
 	if err != nil {
 		return err
 	}
+	_ = os.Remove(IndexFile(id))
 	return writeServers(slices.DeleteFunc(list, func(x domain.Server) bool { return x.ID == id }))
 }
 
@@ -102,5 +124,5 @@ func LoadWindow() (s WindowState) {
 func SaveWindow(s WindowState) {
 	b, _ := json.Marshal(s)
 	_ = os.MkdirAll(Dir(), 0o700)
-	_ = os.WriteFile(windowFile(), b, 0o600)
+	_ = WriteFile(windowFile(), b)
 }

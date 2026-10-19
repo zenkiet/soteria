@@ -1,8 +1,24 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { Cancel, CancelGroup, Retry, transfers, type Transfer } from '#/shared/api/index.ts';
-	import { bytes, filesHref, iconFor, parent } from '#/shared/lib/index.ts';
+	import {
+		Cancel,
+		CancelGroup,
+		Retry,
+		live,
+		transfers,
+		type Transfer
+	} from '#/shared/api/index.ts';
+	import {
+		base,
+		bytes,
+		filesHref,
+		focusHref,
+		iconFor,
+		parent,
+		plural,
+		sum
+	} from '#/shared/lib/index.ts';
 	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	type Row = { key: string; name: string; dir: string; group: boolean; ts: Transfer[] };
@@ -12,8 +28,6 @@
 	let confirm = $state(false);
 	let start = { at: 0, done: 0 };
 
-	const live = (t: Transfer) => t.status === 'running' || t.status === 'queued';
-	const sum = (ts: Transfer[], f: (t: Transfer) => number) => ts.reduce((s, t) => s + f(t), 0);
 	const status = (ts: Transfer[]) =>
 		['running', 'error', 'queued'].find((s) => ts.some((t) => t.status === s)) ?? 'done';
 	const rank: Record<string, number> = { error: 0, running: 1, queued: 2, done: 3 };
@@ -26,7 +40,7 @@
 			out[key] ??= t.group
 				? {
 						key,
-						name: t.group.slice(t.group.lastIndexOf('/') + 1),
+						name: base(t.group),
 						dir: t.group,
 						group: true,
 						ts: []
@@ -56,10 +70,7 @@
 		dismiss();
 		confirm = false;
 	};
-	const show = (r: Row) =>
-		goto(
-			r.group ? filesHref(r.dir) : filesHref(r.dir) + '?focus=' + encodeURIComponent(r.ts[0].remote)
-		);
+	const show = (r: Row) => goto(r.group ? filesHref(r.dir) : focusHref(r.ts[0].remote));
 	const sub = (r: Row) => {
 		const s = status(r.ts);
 		if (s === 'queued') return 'Waiting';
@@ -80,8 +91,8 @@
 				<div class="flex min-w-0 flex-1 flex-col">
 					<div class="truncate font-semibold">
 						{pending
-							? `Uploading ${pending} of ${items.length} items`
-							: `${items.length} items uploaded`}
+							? `Uploading ${pending} of ${plural(items.length, 'item')}`
+							: `${plural(items.length, 'item')} uploaded`}
 						{#if failed}<span class="font-normal text-danger"> · {failed} failed</span>{/if}
 					</div>
 					{#if !collapsed}
@@ -108,7 +119,7 @@
 		</div>
 		{#if !collapsed}
 			<div class="max-h-80 overflow-y-auto">
-				{#each rows as r (r.key)}
+				{#each rows.slice(0, 50) as r (r.key)}
 					{@const s = status(r.ts)}
 					{@const t = r.ts[0]}
 					<div
@@ -180,7 +191,7 @@
 
 <Dialog
 	open={confirm}
-	title="Cancel {pending} remaining uploads?"
+	title="Cancel {plural(pending, 'remaining upload')}?"
 	onclose={() => (confirm = false)}
 >
 	<p class="text-fg-2">

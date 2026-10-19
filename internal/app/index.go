@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/gob"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -29,6 +31,7 @@ type Index struct {
 	dirty    bool
 	later    *time.Timer
 	tell     *time.Timer
+	stop     context.CancelFunc
 }
 
 type item struct {
@@ -39,16 +42,15 @@ type item struct {
 
 // fold drops case and accents so "tai lieu" finds "Tài liệu"; đ has no decomposition, hence the special case.
 func fold(s string) string {
-	out := make([]rune, 0, len(s))
-	for _, r := range norm.NFD.String(strings.ToLower(s)) {
+	return strings.Map(func(r rune) rune {
 		switch {
 		case r == 'đ':
-			out = append(out, 'd')
-		case !unicode.Is(unicode.Mn, r):
-			out = append(out, r)
+			return 'd'
+		case unicode.Is(unicode.Mn, r):
+			return -1
 		}
-	}
-	return string(out)
+		return r
+	}, norm.NFD.String(strings.ToLower(s)))
 }
 
 func NewIndex(s *Session, ev Events) *Index { return &Index{s: s, ev: ev} }
@@ -65,7 +67,7 @@ func (i *Index) set(list []domain.Entry, at time.Time) {
 
 func (i *Index) snapshot() string {
 	if sv := i.s.Current(); sv != nil {
-		return filepath.Join(store.CacheDir(), "index-"+sv.ID+".gob")
+		return store.IndexFile(sv.ID)
 	}
 	return ""
 }
@@ -87,21 +89,9 @@ func (i *Index) Restore() {
 }
 
 func (i *Index) save(list []domain.Entry) {
-	p := i.snapshot()
-	if p == "" || os.MkdirAll(filepath.Dir(p), 0o700) != nil {
-		return
-	}
-	f, err := os.CreateTemp(filepath.Dir(p), "*.tmp")
-	if err != nil {
-		return
-	}
-	err = gob.NewEncoder(f).Encode(list)
-	f.Close()
-	if err == nil {
-		err = os.Rename(f.Name(), p)
-	}
-	if err != nil {
-		os.Remove(f.Name())
+	var b bytes.Buffer
+	if p := i.snapshot(); p != "" && gob.NewEncoder(&b).Encode(list) == nil && os.MkdirAll(filepath.Dir(p), 0o700) == nil {
+		_ = store.WriteFile(p, b.Bytes())
 	}
 }
 
@@ -114,9 +104,12 @@ func (i *Index) Reindex() {
 		return
 	}
 	i.indexing = true
+	ctx, stop := context.WithCancel(context.Background())
+	i.stop = stop
 	i.mu.Unlock()
 	go func() {
-		list, err := c.Tree(context.Background(), "/", i.emit)
+		defer stop()
+		list, err := c.Tree(ctx, "/", i.emit)
 		if cur, _ := i.s.Client(); err == nil && cur == c {
 			i.set(list, time.Now())
 			go i.save(list)
@@ -129,7 +122,7 @@ func (i *Index) Reindex() {
 		i.mu.Unlock()
 		i.emit(st)
 		if again {
-			i.Reindex()
+			i.Reindex() //nolint:contextcheck // the next crawl owns its context; this one is stopped on return
 		}
 	}()
 }
@@ -172,13 +165,7 @@ func (i *Index) Put(es ...domain.Entry) {
 
 // Remove drops p and everything under it.
 func (i *Index) Remove(p string) {
-	i.edit(func(m map[string]item) {
-		for k := range m {
-			if within(k, p) {
-				delete(m, k)
-			}
-		}
-	})
+	i.edit(func(m map[string]item) { maps.DeleteFunc(m, func(k string, _ item) bool { return within(k, p) }) })
 }
 
 // Move re-keys the subtree at from under to; keep leaves the original in place, as a copy does.
@@ -198,8 +185,12 @@ func (i *Index) Move(from, to string, keep bool) {
 	})
 }
 
+// Clear also stops a crawl in flight so the next server's crawl doesn't queue behind it.
 func (i *Index) Clear() {
 	i.mu.Lock()
+	if i.stop != nil {
+		i.stop()
+	}
 	i.entries, i.at = nil, time.Time{}
 	i.mu.Unlock()
 }

@@ -68,7 +68,7 @@ func TestSearch(t *testing.T) {
 }
 
 func TestUploadConflictsAndFreeName(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusCreated)
 			return
@@ -76,7 +76,7 @@ func TestUploadConflictsAndFreeName(t *testing.T) {
 		w.WriteHeader(http.StatusMultiStatus)
 		_, _ = w.Write([]byte(`<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/a.png</D:href><D:propstat><D:prop><D:resourcetype/><D:getcontentlength>7</D:getcontentlength></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`))
 	}))
-	defer srv.Close()
+	srv.Start()
 
 	dir := t.TempDir()
 	for _, n := range []string{"a.png", "b.png"} {
@@ -104,22 +104,51 @@ func TestRetryKeepsID(t *testing.T) {
 	tr := transfers(s)
 	missing := filepath.Join(t.TempDir(), "missing")
 	id := tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Local: missing, Remote: "/x"}, upload(c, missing, "/x", 0)).ID
-	wait := func() domain.Transfer {
-		for range 100 {
-			if ts := tr.List(); len(ts) == 1 && ts[0].Status == "error" {
-				return ts[0]
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		t.Fatalf("transfer never failed: %+v", tr.List())
-		return domain.Transfer{}
-	}
-	wait()
+	<-tr.ts[0].done
 	if err := tr.Retry(id); err != nil {
 		t.Fatal(err)
 	}
-	if got := wait(); got.ID != id {
-		t.Fatalf("retry changed id: %s → %s", id, got.ID)
+	<-tr.ts[0].done
+	if ts := tr.List(); len(ts) != 1 || ts[0].ID != id || ts[0].Status != "error" {
+		t.Fatalf("retry: %+v", ts)
+	}
+}
+
+func TestCancelWhileQueued(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		tr := transfers(&Session{})
+		block := func(ctx context.Context, _ func(int64)) error { <-ctx.Done(); return ctx.Err() }
+		for range 3 {
+			defer tr.enqueue(domain.Transfer{}, block).cancel()
+		}
+		q := tr.enqueue(domain.Transfer{}, block)
+		synctest.Wait()
+		q.cancel()
+		<-q.done
+		if n := tr.Running(); n != 3 {
+			t.Fatalf("a cancelled queued transfer still counts: %d running", n)
+		}
+	})
+}
+
+func TestStallKeepsPart(t *testing.T) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "10")
+		_, _ = io.WriteString(w, "0123")
+		_ = http.NewResponseController(w).Flush()
+		<-r.Context().Done()
+	}))
+	srv.Start()
+	c, _ := session(t, srv.URL).Client()
+	local := filepath.Join(t.TempDir(), "f")
+	ctx, stall := context.WithCancelCause(context.Background())
+	_ = fetch(c, "/f", local)(ctx, func(n int64) {
+		if n == 4 {
+			stall(errStalled)
+		}
+	})
+	if st, err := os.Stat(local + ".part"); err != nil || st.Size() != 4 {
+		t.Fatalf("a stalled download must keep its .part for the retry: %v", err)
 	}
 }
 
@@ -147,7 +176,7 @@ func testEnqueueRetries(t *testing.T) {
 func TestFetchResumes(t *testing.T) {
 	const body = "0123456789"
 	var ranges []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ranges = append(ranges, r.Header.Get("Range"))
 		w.Header().Set("ETag", `"v1"`)
 		if r.Header.Get("Range") == "" {
@@ -158,7 +187,7 @@ func TestFetchResumes(t *testing.T) {
 		}
 		http.ServeContent(w, r, "", time.Time{}, strings.NewReader(body))
 	}))
-	defer srv.Close()
+	srv.Start()
 	c, _ := session(t, srv.URL).Client()
 	local := filepath.Join(t.TempDir(), "f")
 	run := fetch(c, "/f", local)
@@ -170,6 +199,22 @@ func TestFetchResumes(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(local); string(b) != body || ranges[1] != "bytes=4-" {
 		t.Fatalf("got %q after ranges %q", b, ranges)
+	}
+}
+
+func TestDragWriteFolder(t *testing.T) {
+	f := webdavtest.New(map[string]bool{"/": true, "/R": true, "/R/sub": true, "/R/empty": true}, map[string]string{"/R/a": "x", "/R/sub/b": "y"})
+	srv := httptest.NewTestServer(t, f)
+	srv.Start()
+	tr := transfers(session(t, srv.URL))
+	local := filepath.Join(t.TempDir(), "R")
+	if err := tr.DragWrite(domain.Entry{Path: "/R", Dir: true}, local); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := os.ReadFile(filepath.Join(local, "a"))
+	b, _ := os.ReadFile(filepath.Join(local, "sub", "b"))
+	if _, err := os.Stat(filepath.Join(local, "empty")); err != nil || string(a) != "x" || string(b) != "y" {
+		t.Fatalf("tree: a=%q b=%q empty=%v", a, b, err)
 	}
 }
 
@@ -186,8 +231,8 @@ func TestLocalName(t *testing.T) {
 
 func TestTrashRestore(t *testing.T) {
 	f := webdavtest.New(map[string]bool{"/": true, "/Reports": true}, map[string]string{"/Reports/a.pdf": "x", "/Reports/b.pdf": "y"})
-	srv := httptest.NewServer(f)
-	defer srv.Close()
+	srv := httptest.NewTestServer(t, f)
+	srv.Start()
 	s := session(t, srv.URL)
 	idx := NewIndex(s, noEvents{})
 	trash, files := &Trash{S: s, Index: idx}, &Files{S: s, Index: idx}
@@ -216,8 +261,8 @@ func TestThumbFile(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	_ = png.Encode(&buf, src)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(buf.Bytes()) }))
-	defer srv.Close()
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(buf.Bytes()) }))
+	srv.Start()
 	th := &Thumbs{S: session(t, srv.URL), Dir: t.TempDir()}
 	file, err := th.File(context.Background(), "/a.png", "1")
 	if err != nil {

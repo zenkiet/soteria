@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { CancelError } from '@wailsio/runtime';
 	import { List, type Entry } from '#/shared/api/index.ts';
-	import { parent } from '#/shared/lib/index.ts';
+	import { msg, parent, toast } from '#/shared/lib/index.ts';
 	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	let {
@@ -27,9 +28,12 @@
 	);
 
 	$effect(() => {
-		List(cur).then(
-			(l) => (dirs = (l ?? []).filter((d) => d.dir && !items.some((e) => e.path === d.path)))
+		const l = List(cur);
+		l.then(
+			(l) => (dirs = (l ?? []).filter((d) => d.dir && !items.some((e) => e.path === d.path))),
+			(e) => e instanceof CancelError || toast(msg(e), 'error')
 		);
+		return () => l.cancel();
 	});
 </script>
 

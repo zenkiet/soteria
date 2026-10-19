@@ -4,6 +4,8 @@ package thumb
 
 import (
 	"bytes"
+	"cmp"
+	"errors"
 	"image"
 	"image/color"
 	_ "image/gif"
@@ -13,8 +15,14 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
+var errTooBig = errors.New("image too large to preview")
+
 // JPEG returns data as a JPEG at most px pixels on its longer side.
 func JPEG(data []byte, px int) ([]byte, error) {
+	// Decoders allocate the whole canvas from the header: a 1 MB PNG can claim gigabytes.
+	if c, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || c.Width*c.Height > 64<<20 {
+		return nil, cmp.Or(err, errTooBig)
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, err

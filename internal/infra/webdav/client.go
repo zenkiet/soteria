@@ -66,6 +66,9 @@ func (c *Client) Do(ctx context.Context, method, p string, body io.Reader, size 
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
+			return nil, &domain.DavError{Text: "the server's certificate isn't trusted, tick “Trust self-signed certificate” if you expect that"}
+		}
 		return nil, domain.ErrOffline
 	}
 	if resp.StatusCode >= 400 {
@@ -108,7 +111,7 @@ func (c *Client) exec(ctx context.Context, method, p string, hdr ...string) erro
 }
 
 const (
-	entryProps = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><creationdate/><getcontenttype/><getetag/></prop></propfind>`
+	entryProps = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><creationdate/><getcontenttype/></prop></propfind>`
 	quotaProps = `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><quota-used-bytes/><quota-available-bytes/></prop></propfind>`
 )
 
@@ -119,7 +122,6 @@ type propstat struct {
 		Modified string `xml:"DAV: getlastmodified"`
 		Created  string `xml:"DAV: creationdate"`
 		Type     string `xml:"DAV: getcontenttype"`
-		ETag     string `xml:"DAV: getetag"`
 		Resource struct {
 			Collection *struct{} `xml:"DAV: collection"`
 		} `xml:"DAV: resourcetype"`
@@ -183,7 +185,7 @@ func (c *Client) entry(r response) (domain.Entry, bool) {
 		href = u.Path
 	}
 	p := path.Clean("/" + strings.TrimPrefix(href, strings.TrimSuffix(c.Base.Path, "/")))
-	e := domain.Entry{Name: path.Base(p), Path: p, Dir: ps.Prop.Resource.Collection != nil, Size: ps.Prop.Size, ContentType: ps.Prop.Type, ETag: ps.Prop.ETag}
+	e := domain.Entry{Name: path.Base(p), Path: p, Dir: ps.Prop.Resource.Collection != nil, Size: ps.Prop.Size, ContentType: ps.Prop.Type}
 	if t, err := http.ParseTime(ps.Prop.Modified); err == nil {
 		e.Modified = t
 	}
@@ -288,8 +290,10 @@ func (c *Client) Quota(ctx context.Context) (domain.Quota, error) {
 
 // restQuota reads the SFTPGo user a reverse proxy exposes at /api/quota/<user>; quota_size 0 means unlimited.
 func (c *Client) restQuota(ctx context.Context) (domain.Quota, bool) {
-	u := *c.Base
-	u.Path, u.RawQuery = "/api/quota/"+url.PathEscape(c.User), ""
+	u, err := c.Base.Parse("/api/quota/" + url.PathEscape(c.User))
+	if err != nil {
+		return domain.Quota{}, false
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return domain.Quota{}, false

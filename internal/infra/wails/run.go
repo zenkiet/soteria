@@ -3,8 +3,11 @@ package wails
 import (
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
+	"path/filepath"
 	"runtime"
+	"slices"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -24,6 +27,7 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	// May exit: hands this launch to the running instance.
 	notifyFirstInstance()
 	a.Dock, a.Notes = dock.New(), notifications.New()
+	a.rt = time.AfterFunc(math.MaxInt64, a.refresh)
 	a.T.OnChange = func(status, kind string) {
 		a.refreshLater()
 		if status != "queued" {
@@ -32,7 +36,6 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	}
 	drag.OnWrite, drag.OnEnded = a.T.DragWrite, func() { Events{}.Emit("dragend", true) }
 
-	var win *application.WebviewWindow
 	wapp := application.New(application.Options{
 		Name:        "Soteria",
 		Description: "WebDAV client",
@@ -41,10 +44,7 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				if win != nil {
-					win.Restore()
-				}
-				// Not win.Show(): show() also rescues an off-screen window.
+				// Not win.Restore(): it also unmaximises.
 				a.show("")
 				for _, arg := range data.Args {
 					a.openLink(arg)
@@ -91,7 +91,7 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	if a.state.W > 0 {
 		opts.Width, opts.Height = a.state.W, a.state.H
 	}
-	win = wapp.Window.NewWithOptions(opts)
+	win := wapp.Window.NewWithOptions(opts)
 	a.win = win
 	a.trackWindow(win)
 	// Background mode: the close button hides instead of closing; Quit lives in the tray menu and ⌘Q.
@@ -106,6 +106,13 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	a.Notes.OnNotificationResponse(a.respond)
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		d := Drop{Files: e.Context().DroppedFiles()}
+		// A drag out of Soteria on Windows lands back here as drive paths; uploading them copies the server onto itself.
+		if drv := a.M.Drive(); drv.Mounted && slices.ContainsFunc(d.Files, func(f string) bool {
+			rel, err := filepath.Rel(drv.Path, f)
+			return err == nil && filepath.IsLocal(rel)
+		}) {
+			return
+		}
 		if t := e.Context().DropTargetDetails(); t != nil {
 			d.Dir = t.Attributes["data-path"]
 		}
@@ -118,32 +125,18 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 }
 
 // Screens can be empty before the platform reports them, so this fails open.
-func onScreen(screens []*application.Screen, x, y, w int) bool {
-	if len(screens) == 0 {
-		return true
-	}
-	cx, cy := x+w/2, y+20
-	for _, s := range screens {
-		b := s.Bounds
-		if cx >= b.X && cx < b.X+b.Width && cy >= b.Y && cy < b.Y+b.Height {
-			return true
-		}
-	}
-	return false
+func onScreen(screens []*application.Screen, b application.Rect) bool {
+	top := application.Point{X: b.X + b.Width/2, Y: b.Y + 20}
+	return len(screens) == 0 || slices.ContainsFunc(screens, func(s *application.Screen) bool { return s.Bounds.Contains(top) })
 }
 
+// One timer that resize events only push back: Wails runs each event listener in its own goroutine.
 func (a *App) trackWindow(w *application.WebviewWindow) {
-	var t *time.Timer
-	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {
-		if t != nil {
-			t.Stop()
-		}
-		t = time.AfterFunc(300*time.Millisecond, func() {
-			if w.IsMaximised() {
-				return
-			}
+	save := time.AfterFunc(math.MaxInt64, func() {
+		if !w.IsMaximised() {
 			a.state.W, a.state.H = w.Size()
 			store.SaveWindow(a.state)
-		})
+		}
 	})
+	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) { save.Reset(300 * time.Millisecond) })
 }

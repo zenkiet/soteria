@@ -11,8 +11,7 @@
 		url: '',
 		username: '',
 		insecure: false,
-		remember: true,
-		lastUsed: 0
+		remember: true
 	});
 	let password = $state('');
 	let show = $state(false);

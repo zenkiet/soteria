@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Recent, Reindex, indexStatus, type Entry } from '#/shared/api/index.ts';
-	import { ago, bytes, filesHref, iconFor, parent, when } from '#/shared/lib/index.ts';
+	import { ago, bytes, focusHref, iconFor, parent, when } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
 	let items = $state.raw<Entry[]>([]);
@@ -30,8 +30,7 @@
 			.map((g) => [g, items.filter((e) => bucket(e) === g)] as const)
 			.filter(([, l]) => l.length)
 	);
-	const show = (e: Entry) =>
-		goto(filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path));
+	const show = (e: Entry) => goto(focusHref(e.path));
 </script>
 
 <header class="page-header">

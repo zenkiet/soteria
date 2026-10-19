@@ -2,7 +2,7 @@
 #import <WebKit/WebKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-extern int goDragWrite(char *remote, char *dest);
+extern int goDragWrite(char *remote, char *dest, long long size, int dir);
 extern void goDragEnded(void);
 
 @interface DragSource : NSObject <NSDraggingSource, NSFilePromiseProviderDelegate>
@@ -28,7 +28,8 @@ extern void goDragEnded(void);
 - (void)filePromiseProvider:(NSFilePromiseProvider *)provider
             writePromiseToURL:(NSURL *)url
             completionHandler:(void (^)(NSError *))completionHandler {
-	int rc = goDragWrite((char *)[provider.userInfo[@"path"] UTF8String], (char *)[url.path UTF8String]);
+	NSDictionary *f = provider.userInfo;
+	int rc = goDragWrite((char *)[f[@"path"] UTF8String], (char *)[url.path UTF8String], [f[@"size"] longLongValue], [f[@"dir"] boolValue]);
 	completionHandler(rc == 0 ? nil : [NSError errorWithDomain:@"soteria" code:rc userInfo:nil]);
 }
 
@@ -64,7 +65,8 @@ int dragOut(void *window, const char *json) {
 	NSPoint at = [view convertPoint:event.locationInWindow fromView:nil];
 	NSMutableArray *items = [NSMutableArray new];
 	for (NSDictionary *f in files) {
-		UTType *type = [UTType typeWithFilenameExtension:[f[@"name"] pathExtension]] ?: UTTypeData;
+		UTType *type = [f[@"dir"] boolValue] ? UTTypeFolder
+		                                     : ([UTType typeWithFilenameExtension:[f[@"name"] pathExtension]] ?: UTTypeData);
 		NSFilePromiseProvider *p = [[NSFilePromiseProvider alloc] initWithFileType:type.identifier delegate:source];
 		p.userInfo = f;
 		NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter:p];

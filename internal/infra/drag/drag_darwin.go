@@ -1,6 +1,5 @@
 //go:build darwin
 
-// Package drag starts a native drag of remote files; the OS asks for each file on drop and OnWrite downloads it there.
 package drag
 
 /*
@@ -19,14 +18,8 @@ import (
 	"soteria/internal/domain"
 )
 
-var (
-	// OnWrite downloads remote to dest and must block until done.
-	OnWrite func(remote, dest string) error
-	OnEnded func()
-)
-
 // Start must run on the main thread with an NSWindow pointer.
-func Start(window unsafe.Pointer, entries []domain.Entry) error {
+func Start(window unsafe.Pointer, entries []domain.Entry, _ func() domain.Drive) error {
 	b, _ := json.Marshal(entries)
 	cs := C.CString(string(b))
 	defer C.free(unsafe.Pointer(cs))
@@ -37,8 +30,9 @@ func Start(window unsafe.Pointer, entries []domain.Entry) error {
 }
 
 //export goDragWrite
-func goDragWrite(remote, dest *C.char) C.int {
-	if OnWrite == nil || OnWrite(C.GoString(remote), C.GoString(dest)) != nil {
+func goDragWrite(remote, dest *C.char, size C.longlong, dir C.int) C.int {
+	e := domain.Entry{Path: C.GoString(remote), Size: int64(size), Dir: dir != 0}
+	if OnWrite == nil || OnWrite(e, C.GoString(dest)) != nil {
 		return 1
 	}
 	return 0

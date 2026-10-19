@@ -11,8 +11,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"soteria/internal/domain"
 )
@@ -24,18 +25,8 @@ func mountDir() string {
 }
 
 func isMounted(p string) bool {
-	var st syscall.Statfs_t
-	if syscall.Statfs(p, &st) != nil {
-		return false
-	}
-	name := make([]byte, 0, len(st.Fstypename))
-	for _, c := range st.Fstypename {
-		if c == 0 {
-			break
-		}
-		name = append(name, byte(c))
-	}
-	return string(name) == "webdav"
+	var st unix.Statfs_t
+	return unix.Statfs(p, &st) == nil && unix.ByteSliceToString(st.Fstypename[:]) == "webdav"
 }
 
 func (m *Mounter) Drive() domain.Drive {
@@ -44,6 +35,8 @@ func (m *Mounter) Drive() domain.Drive {
 
 // Mount shows the server in Finder as a volume named Soteria.
 func (m *Mounter) Mount() (domain.Drive, error) {
+	m.busy.Lock()
+	defer m.busy.Unlock()
 	dir := mountDir()
 	if isMounted(dir) {
 		return domain.Drive{Path: dir, Mounted: true}, nil
@@ -67,6 +60,8 @@ func (m *Mounter) Mount() (domain.Drive, error) {
 }
 
 func (m *Mounter) Unmount() error {
+	m.busy.Lock()
+	defer m.busy.Unlock()
 	dir := mountDir()
 	if !isMounted(dir) {
 		return nil

@@ -24,8 +24,8 @@ func (a *App) initUpdater(wapp *application.App) {
 	_ = wapp.Updater.Init(updater.Config{CurrentVersion: a.Version, Providers: []updater.Provider{gh}, Window: updater.WindowNone})
 	exe, _ := os.Executable()
 	dir := filepath.Dir(exe)
-	if i := strings.Index(exe, ".app/"); runtime.GOOS == "darwin" && i >= 0 {
-		dir = filepath.Dir(exe[:i+4])
+	if b, _, ok := strings.Cut(exe, ".app/"); ok && runtime.GOOS == "darwin" {
+		dir = filepath.Dir(b)
 	}
 	a.blocked = !writableDir(dir)
 	go a.updateLoop()

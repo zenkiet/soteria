@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { EmptyTrash, ListTrash, Purge, Restore, type TrashItem } from '#/shared/api/index.ts';
-	import { bytes, filesHref, iconFor, msg, toast, when } from '#/shared/lib/index.ts';
+	import { bytes, filesHref, iconFor, msg, plural, toast, when } from '#/shared/lib/index.ts';
 	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	let items = $state.raw<TrashItem[]>([]);
@@ -52,7 +52,7 @@
 			from Files and search.
 		</span>
 		{#if items.length}
-			<span class="font-mono text-fg-3">{items.length} items · {bytes(total)}</span>
+			<span class="font-mono text-fg-3">{plural(items.length, 'item')} · {bytes(total)}</span>
 		{/if}
 	</div>
 	{#if !loading && !items.length}
@@ -93,7 +93,7 @@
 
 <Dialog open={confirm} title="Empty Trash?" onclose={() => (confirm = false)}>
 	<p class="text-fg-2">
-		{items.length} items will be removed from the server for good. This can't be undone.
+		{plural(items.length, 'item')} will be removed from the server for good. This can't be undone.
 	</p>
 	<div class="mt-4 flex justify-end gap-2">
 		<button class="btn" onclick={() => (confirm = false)}>Cancel</button>

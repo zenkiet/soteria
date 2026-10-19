@@ -58,14 +58,7 @@ func (a *App) SetBackground(on, notify bool) {
 }
 
 // refreshLater coalesces bursts: a folder upload enqueues hundreds of transfers at once.
-func (a *App) refreshLater() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.rt != nil {
-		a.rt.Stop()
-	}
-	a.rt = time.AfterFunc(300*time.Millisecond, a.refresh)
-}
+func (a *App) refreshLater() { a.rt.Reset(300 * time.Millisecond) }
 
 func (a *App) refresh() {
 	n := a.T.Running()
@@ -130,12 +123,11 @@ func (a *App) show(path string) {
 	}
 	go func() {
 		// A monitor unplugged while the window hid in the tray leaves it off-screen.
-		x, y := a.win.Position()
-		w, _ := a.win.Size()
-		if !onScreen(application.Get().Screen.GetAll(), x, y, w) {
+		if !onScreen(application.Get().Screen.GetAll(), a.win.Bounds()) {
 			a.win.Center()
 		}
 		a.Dock.ShowAppIcon()
+		a.win.UnMinimise()
 		a.win.Show()
 		a.win.Focus()
 		// Windows may refuse SetForegroundWindow from an unfocused process; pulsing topmost raises it anyway.

@@ -24,7 +24,6 @@ export interface Entry {
     "modified": string;
     "created": string;
     "contentType": string;
-    "etag": string;
 }
 
 export interface IndexStatus {
@@ -36,7 +35,7 @@ export interface IndexStatus {
 }
 
 /**
- * Quota in bytes; -1 when the server does not report it.
+ * Quota is in bytes; -1 means the server does not report it.
  */
 export interface Quota {
     "used": number;
@@ -50,7 +49,6 @@ export interface Server {
     "username": string;
     "insecure": boolean;
     "remember": boolean;
-    "lastUsed": number;
 }
 
 export interface Transfer {
@@ -74,7 +72,6 @@ export interface TrashItem {
     "modified": string;
     "created": string;
     "contentType": string;
-    "etag": string;
     "from": string;
     "deleted": string;
 }

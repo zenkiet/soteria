@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Conflict } from '#/shared/api/index.ts';
-	import { bytes, when } from '#/shared/lib/index.ts';
+	import { base, bytes, when } from '#/shared/lib/index.ts';
 	import { Dialog } from '#/shared/ui/index.ts';
 
 	export type Resolution = 'skip' | 'keep' | 'replace' | 'merge';
@@ -13,7 +13,7 @@
 		$props();
 
 	let all = $state(false);
-	const name = $derived(c.remote.slice(c.remote.lastIndexOf('/') + 1));
+	const name = $derived(base(c.remote));
 </script>
 
 {#snippet card(label: string, size: number, date: string)}

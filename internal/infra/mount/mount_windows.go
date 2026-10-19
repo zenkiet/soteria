@@ -40,9 +40,11 @@ func driverInstalled() bool {
 	return err == nil
 }
 
+// GetLogicalDrives also counts empty card readers and offline network drives, which Stat reports as free.
 func freeLetter() string {
+	used, _ := windows.GetLogicalDrives()
 	for c := 'Z'; c >= 'D'; c-- {
-		if _, err := os.Stat(string(c) + `:\`); err != nil {
+		if used&(1<<(c-'A')) == 0 {
 			return string(c)
 		}
 	}
@@ -60,6 +62,8 @@ func (m *Mounter) Drive() domain.Drive {
 
 // Mount shows the server as a local drive named Soteria through WinFsp.
 func (m *Mounter) Mount() (domain.Drive, error) {
+	m.busy.Lock()
+	defer m.busy.Unlock()
 	if d := m.Drive(); d.Mounted {
 		return d, nil
 	}
@@ -96,6 +100,8 @@ func (m *Mounter) Mount() (domain.Drive, error) {
 }
 
 func (m *Mounter) Unmount() error {
+	m.busy.Lock()
+	defer m.busy.Unlock()
 	m.mu.Lock()
 	host, letter := mnt.host, mnt.letter
 	m.mu.Unlock()
@@ -122,7 +128,7 @@ func (m *Mounter) InstallDriver() error {
 	if driverInstalled() {
 		return nil
 	}
-	resp, err := http.Get(winfspURL)
+	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Get(winfspURL)
 	if err != nil {
 		return fmt.Errorf("couldn't download WinFsp: %w", err)
 	}

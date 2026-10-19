@@ -15,13 +15,13 @@ import (
 func TestDavFS(t *testing.T) {
 	f := webdavtest.New(map[string]bool{"/": true, "/Docs": true}, map[string]string{"/Docs/a.txt": "hello world"})
 	gets := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			gets++
 		}
 		f.ServeHTTP(w, r)
 	}))
-	defer srv.Close()
+	srv.Start()
 	c, _ := webdav.New(domain.Server{URL: srv.URL, Username: "u"}, "p")
 	fs := newDavFS(New(func() (*webdav.Client, error) { return c, nil }, nil))
 	none := ^uint64(0)

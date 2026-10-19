@@ -3,7 +3,6 @@ package wails
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -136,17 +135,12 @@ func (a *App) Open(p string) error          { return shell.Open(p) }
 
 func (a *App) LogPath() string { return store.LogPath() }
 
-// DragOut starts a native drag of remote files; Finder asks for each file on drop and it is downloaded there.
+// DragOut starts a native drag: macOS downloads each item where it is dropped, Windows hands Explorer the drive paths.
 func (a *App) DragOut(entries []domain.Entry) error {
-	if len(entries) == 0 {
+	if len(entries) == 0 || a.win == nil {
 		return nil
 	}
-	win, ok := application.Get().Window.Current().(*application.WebviewWindow)
-	if !ok {
-		return errors.New("no window")
-	}
-	a.T.SetDragging(entries)
 	var err error
-	application.InvokeSync(func() { err = drag.Start(win.NativeWindow(), entries) })
+	application.InvokeSync(func() { err = drag.Start(a.win.NativeWindow(), entries, a.M.Drive) })
 	return err
 }

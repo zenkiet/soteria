@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"soteria/internal/infra/store"
 	"soteria/internal/infra/thumb"
 )
 
@@ -54,17 +55,7 @@ func (t *Thumbs) File(ctx context.Context, p, v string) (string, error) {
 		return "", ErrUnsupported
 	}
 	_ = os.MkdirAll(t.Dir, 0o700)
-	f, err := os.CreateTemp(t.Dir, "*.tmp")
-	if err != nil {
-		return "", err
-	}
-	_, err = f.Write(jpg)
-	f.Close()
-	if err == nil {
-		err = os.Rename(f.Name(), file)
-	}
-	if err != nil {
-		os.Remove(f.Name())
+	if err := store.WriteFile(file, jpg); err != nil {
 		return "", err
 	}
 	return file, nil

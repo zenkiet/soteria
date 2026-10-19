@@ -6,6 +6,7 @@
 		Disconnect,
 		indexStatus,
 		List,
+		live,
 		Mount,
 		Ping,
 		Quota,
@@ -37,19 +38,13 @@
 	const route = $derived(page.route.id ?? '');
 	const inFiles = $derived(route.startsWith('/(app)/files'));
 	const top = $derived(((page.params as { path?: string }).path ?? '').split('/')[0]);
-	const active = $derived(
-		transfers.list.filter((t) => t.status === 'running' || t.status === 'queued').length
-	);
+	const active = $derived(transfers.list.filter(live).length);
 	const used = $derived(quota && quota.used >= 0 ? quota.used : 0);
 	const total = $derived(quota && quota.available >= 0 ? used + quota.available : 0);
 
 	let menu = $state(false);
 
-	let hidden = $state(prefs.sidebarHidden);
-	function toggleSidebar() {
-		hidden = !hidden;
-		setPrefs({ sidebarHidden: hidden });
-	}
+	const toggleSidebar = () => setPrefs({ sidebarHidden: !prefs.sidebarHidden });
 	const leave = async (fn: () => Promise<void>) => {
 		await fn();
 		await goto('/');
@@ -62,6 +57,7 @@
 	let retryIn = $state(0);
 	let delay = 2;
 	let timer: ReturnType<typeof setTimeout>;
+	let back: ReturnType<typeof setTimeout>;
 	const countdown = () => {
 		timer = setTimeout(() => (--retryIn > 0 ? countdown() : probe()), 1000);
 	};
@@ -72,7 +68,7 @@
 				net.offline = false;
 				net.back = true;
 				delay = 2;
-				setTimeout(() => (net.back = false), 3000);
+				back = setTimeout(() => (net.back = false), 3000);
 			},
 			() => {
 				delay = Math.min(delay * 2, 30);
@@ -87,6 +83,10 @@
 		countdown();
 		return () => clearTimeout(timer);
 	});
+	$effect(() => () => {
+		clearTimeout(back);
+		net.back = false;
+	});
 </script>
 
 <svelte:window
@@ -96,7 +96,10 @@
 />
 
 <div class="flex h-screen">
-	<aside class="sidebar flex w-60 shrink-0 flex-col border-r border-line bg-bg" class:gone={hidden}>
+	<aside
+		class="sidebar flex w-60 shrink-0 flex-col border-r border-line bg-bg"
+		class:gone={prefs.sidebarHidden}
+	>
 		<div class="flex h-13 shrink-0 items-center justify-end pr-2" style="--wails-draggable: drag">
 			<button class="btn btn-ghost h-7 w-7 px-0" title="Hide sidebar" onclick={toggleSidebar}>
 				<Icon name="sidebar" size={17} />
@@ -212,11 +215,11 @@
 	</aside>
 	<main
 		class="relative flex min-w-0 flex-1 flex-col bg-surface"
-		data-sidebar={hidden ? 'hidden' : undefined}
+		data-sidebar={prefs.sidebarHidden ? 'hidden' : undefined}
 		style="--lead: {desktop ? '76px' : '12px'}"
 	>
 		{@render children()}
-		{#if hidden}
+		{#if prefs.sidebarHidden}
 			<button
 				class="btn btn-ghost absolute top-3 z-10 h-7 w-7 px-0"
 				style="left: var(--lead)"

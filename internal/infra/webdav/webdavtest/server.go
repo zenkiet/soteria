@@ -4,6 +4,7 @@ package webdavtest
 import (
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -58,29 +59,21 @@ func (f *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for k, v := range f.Files {
-			if k == p || strings.HasPrefix(k, p+"/") {
+			if under(k, p) {
 				f.Files[to+k[len(p):]] = v
 				delete(f.Files, k)
 			}
 		}
 		for k := range f.Dirs {
-			if k == p || strings.HasPrefix(k, p+"/") {
+			if under(k, p) {
 				f.Dirs[to+k[len(p):]] = true
 				delete(f.Dirs, k)
 			}
 		}
 		w.WriteHeader(http.StatusCreated)
 	case http.MethodDelete:
-		for k := range f.Files {
-			if k == p || strings.HasPrefix(k, p+"/") {
-				delete(f.Files, k)
-			}
-		}
-		for k := range f.Dirs {
-			if k == p || strings.HasPrefix(k, p+"/") {
-				delete(f.Dirs, k)
-			}
-		}
+		maps.DeleteFunc(f.Files, func(k, _ string) bool { return under(k, p) })
+		maps.DeleteFunc(f.Dirs, func(k string, _ bool) bool { return under(k, p) })
 		w.WriteHeader(http.StatusNoContent)
 	case "PROPFIND":
 		if !f.Dirs[p] {
@@ -118,3 +111,5 @@ func (f *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
+
+func under(k, p string) bool { return k == p || strings.HasPrefix(k, p+"/") }

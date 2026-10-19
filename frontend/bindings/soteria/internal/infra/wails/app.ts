@@ -61,15 +61,12 @@ export function DownloadDir(remote: string, dest: string): $CancellablePromise<v
 }
 
 /**
- * DragOut starts a native drag of remote files; Finder asks for each file on drop and it is downloaded there.
+ * DragOut starts a native drag: macOS downloads each item where it is dropped, Windows hands Explorer the drive paths.
  */
 export function DragOut(entries: domain$0.Entry[] | null): $CancellablePromise<void> {
     return $Call.ByID(1122960181, entries);
 }
 
-/**
- * drive
- */
 export function Drive(): $CancellablePromise<domain$0.Drive> {
     return $Call.ByID(2672827735);
 }
@@ -109,9 +106,6 @@ export function Link(p: string): $CancellablePromise<string> {
     return $Call.ByID(324235465, p);
 }
 
-/**
- * files
- */
 export function List(p: string): $CancellablePromise<domain$0.Entry[] | null> {
     return $Call.ByID(309576417, p);
 }
@@ -164,9 +158,6 @@ export function Recent(n: number): $CancellablePromise<domain$0.Entry[] | null> 
     return $Call.ByID(2168970302, n);
 }
 
-/**
- * search
- */
 export function Reindex(): $CancellablePromise<void> {
     return $Call.ByID(1654599532);
 }
@@ -191,9 +182,6 @@ export function Search(q: string): $CancellablePromise<domain$0.Entry[] | null> 
     return $Call.ByID(267664905, q);
 }
 
-/**
- * session
- */
 export function Servers(): $CancellablePromise<domain$0.Server[] | null> {
     return $Call.ByID(2304319571);
 }
@@ -217,16 +205,10 @@ export function SignOut(): $CancellablePromise<void> {
     return $Call.ByID(3454649544);
 }
 
-/**
- * transfers
- */
 export function Transfers(): $CancellablePromise<domain$0.Transfer[] | null> {
     return $Call.ByID(377283727);
 }
 
-/**
- * trash
- */
 export function Trash(p: string): $CancellablePromise<string> {
     return $Call.ByID(3766480357, p);
 }

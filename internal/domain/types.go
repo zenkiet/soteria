@@ -11,7 +11,6 @@ type Entry struct {
 	Modified    time.Time `json:"modified"`
 	Created     time.Time `json:"created"`
 	ContentType string    `json:"contentType"`
-	ETag        string    `json:"etag"`
 }
 
 // Quota is in bytes; -1 means the server does not report it.
@@ -27,7 +26,6 @@ type Server struct {
 	Username string `json:"username"`
 	Insecure bool   `json:"insecure"`
 	Remember bool   `json:"remember"`
-	LastUsed int64  `json:"lastUsed"`
 }
 
 type Transfer struct {

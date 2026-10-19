@@ -368,10 +368,8 @@ func (f *davFS) Rename(from, to string) int {
 	return f.mutate(from, func(c *webdav.Client) error { return c.Move(bg, from, to) })
 }
 
-func (f *davFS) Opendir(string) (int, uint64)        { return 0, ^uint64(0) }
 func (f *davFS) Releasedir(string, uint64) int       { return 0 }
 func (f *davFS) Flush(string, uint64) int            { return 0 }
-func (f *davFS) Fsync(string, bool, uint64) int      { return 0 }
 func (f *davFS) Access(string, uint32) int           { return 0 }
 func (f *davFS) Chmod(string, uint32) int            { return 0 }
 func (f *davFS) Chown(string, uint32, uint32) int    { return 0 }

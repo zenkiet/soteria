@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build !darwin && !windows
 
 package drag
 
@@ -9,11 +9,6 @@ import (
 	"soteria/internal/domain"
 )
 
-var (
-	OnWrite func(remote, dest string) error
-	OnEnded func()
-)
-
-func Start(unsafe.Pointer, []domain.Entry) error {
+func Start(unsafe.Pointer, []domain.Entry, func() domain.Drive) error {
 	return errors.New("drag out is not supported on this platform")
 }

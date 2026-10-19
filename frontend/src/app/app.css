@@ -68,10 +68,6 @@
 	body {
 		@apply bg-bg font-sans text-[13px] leading-[1.45] text-fg antialiased select-none;
 	}
-	button,
-	input {
-		font: inherit;
-	}
 	input,
 	[contenteditable] {
 		user-select: text;
@@ -164,6 +160,12 @@
 	.lights.dim button {
 		background: var(--line-2);
 		box-shadow: none;
+	}
+	.seg {
+		@apply inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5;
+	}
+	.seg > button {
+		@apply rounded px-3 py-1 text-xs font-medium text-fg-2 aria-pressed:bg-surface aria-pressed:text-fg aria-pressed:shadow-[0_1px_2px_rgba(0,0,0,0.08)];
 	}
 	.btn {
 		@apply inline-flex h-8 items-center justify-center gap-2 rounded-md border border-line-2 bg-surface px-3 font-medium whitespace-nowrap text-fg hover:bg-surface-2 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;

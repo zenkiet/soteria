@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"sync"
-	"time"
 
 	"soteria/internal/domain"
 	"soteria/internal/infra/keychain"
@@ -62,7 +61,6 @@ func (s *Session) Connect(sv domain.Server, password string) (*domain.Server, er
 	if sv.Name == "" {
 		sv.Name = c.Base.Host
 	}
-	sv.LastUsed = time.Now().Unix()
 	if err := store.SaveServer(sv); err != nil {
 		return nil, err
 	}

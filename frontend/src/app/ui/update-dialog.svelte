@@ -1,13 +1,18 @@
 <script lang="ts">
 	import { Browser } from '@wailsio/runtime';
-	import { InstallUpdate, RestartToUpdate, check, transfers, update } from '#/shared/api/index.ts';
-	import { bytes, prefs, setPrefs, when, windows } from '#/shared/lib/index.ts';
+	import {
+		InstallUpdate,
+		RestartToUpdate,
+		check,
+		live,
+		transfers,
+		update
+	} from '#/shared/api/index.ts';
+	import { bytes, plural, prefs, setPrefs, when, windows } from '#/shared/lib/index.ts';
 	import { Dialog, Icon } from '#/shared/ui/index.ts';
 
 	const s = $derived(update.s);
-	const running = $derived(
-		transfers.list.filter((t) => t.status === 'running' || t.status === 'queued').length
-	);
+	const running = $derived(transfers.list.filter(live).length);
 	const busy = $derived(['downloading', 'verifying', 'installing'].includes(s.state));
 	const mode = $derived(s.state === 'available' && s.blocked ? 'blocked' : s.state);
 
@@ -135,8 +140,8 @@
 				>
 					<Icon name="info" size={15} class="mt-0.5 shrink-0" />
 					<span
-						>{running} transfers are still running. They stop when Soteria quits and can be retried from
-						Transfers.</span
+						>{plural(running, 'transfer')} still running. They stop when Soteria quits and can be retried
+						from Transfers.</span
 					>
 				</div>
 			{/if}

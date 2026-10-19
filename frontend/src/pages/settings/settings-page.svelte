@@ -162,20 +162,12 @@
 			onchange={(e) => toggleLogin(e.currentTarget.checked)}
 		/>
 	</label>
-	<label class="flex items-center justify-between gap-6">
-		<span class="flex flex-col gap-0.5">
-			<span>Reconnect to the last server</span>
-			<span class="text-xs text-fg-3">
-				Sign in again with the password in the Keychain, so the drive comes back on its own.
-			</span>
-		</span>
-		<input
-			type="checkbox"
-			class="switch"
-			checked={prefs.reconnect}
-			onchange={(e) => setPrefs({ reconnect: e.currentTarget.checked })}
-		/>
-	</label>
+	{@render toggle(
+		'Reconnect to the last server',
+		'Sign in again with the password in the Keychain, so the drive comes back on its own.',
+		prefs.reconnect,
+		(reconnect) => setPrefs({ reconnect })
+	)}
 {/snippet}
 
 {#snippet updates()}
@@ -196,20 +188,12 @@
 			</button>
 		{/if}
 	</div>
-	<label class="flex items-center justify-between gap-6">
-		<span class="flex flex-col gap-0.5">
-			<span>Check for updates automatically</span>
-			<span class="text-xs text-fg-3"
-				>At launch and every 6 hours. Nothing installs without asking you.</span
-			>
-		</span>
-		<input
-			type="checkbox"
-			class="switch"
-			checked={prefs.autoUpdate}
-			onchange={(e) => setPrefs({ autoUpdate: e.currentTarget.checked })}
-		/>
-	</label>
+	{@render toggle(
+		'Check for updates automatically',
+		'At launch and every 6 hours. Nothing installs without asking you.',
+		prefs.autoUpdate,
+		(autoUpdate) => setPrefs({ autoUpdate })
+	)}
 {/snippet}
 
 {#snippet drive()}
@@ -228,19 +212,12 @@
 			onchange={(e) => toggleDrive(e.currentTarget.checked)}
 		/>
 	</label>
-	<label class="flex items-center justify-between gap-6">
-		<span class="flex flex-col gap-0.5">
-			<span>Connect automatically</span>
-			<span class="text-xs text-fg-3">Mount the drive each time you sign in to this server.</span>
-		</span>
-		<input
-			type="checkbox"
-			class="switch"
-			checked={prefs.drive[server.id] ?? false}
-			onchange={(e) =>
-				setPrefs({ drive: { ...prefs.drive, [server.id]: e.currentTarget.checked } })}
-		/>
-	</label>
+	{@render toggle(
+		'Connect automatically',
+		'Mount the drive each time you sign in to this server.',
+		prefs.drive[server.id] ?? false,
+		(on) => setPrefs({ drive: { ...prefs.drive, [server.id]: on } })
+	)}
 	<div class="flex gap-2">
 		{#if info?.mounted}
 			{@const path = info.path}
@@ -303,30 +280,31 @@
 {/snippet}
 
 {#snippet background()}
+	{@render toggle(
+		'Keep running in the background',
+		`Shows an icon in the ${bar} so the network drive stays connected.`,
+		prefs.background,
+		(background) => setPrefs({ background })
+	)}
+	{@render toggle(
+		'Notify when transfers finish',
+		'Only while Soteria is in the background.',
+		prefs.notify,
+		(notify) => setPrefs({ notify })
+	)}
+{/snippet}
+
+{#snippet toggle(title: string, sub: string, checked: boolean, set: (on: boolean) => void)}
 	<label class="flex items-center justify-between gap-6">
 		<span class="flex flex-col gap-0.5">
-			<span>Keep running in the background</span>
-			<span class="text-xs text-fg-3"
-				>Shows an icon in the {bar} so the network drive stays connected.</span
-			>
+			<span>{title}</span>
+			<span class="text-xs text-fg-3">{sub}</span>
 		</span>
 		<input
 			type="checkbox"
 			class="switch"
-			checked={prefs.background}
-			onchange={(e) => setPrefs({ background: e.currentTarget.checked })}
-		/>
-	</label>
-	<label class="flex items-center justify-between gap-6">
-		<span class="flex flex-col gap-0.5">
-			<span>Notify when transfers finish</span>
-			<span class="text-xs text-fg-3">Only while Soteria is in the background.</span>
-		</span>
-		<input
-			type="checkbox"
-			class="switch"
-			checked={prefs.notify}
-			onchange={(e) => setPrefs({ notify: e.currentTarget.checked })}
+			{checked}
+			onchange={(e) => set(e.currentTarget.checked)}
 		/>
 	</label>
 {/snippet}
@@ -361,12 +339,11 @@
 {#snippet appearance()}
 	<div class="flex items-center justify-between">
 		<span>Theme</span>
-		<div class="inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5">
+		<div class="seg">
 			{#each themes as t (t)}
 				<button
-					class="rounded px-3 py-1.25 text-xs font-medium capitalize {theme.value === t
-						? 'bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-						: 'text-fg-2'}"
+					class="py-1.25 capitalize"
+					aria-pressed={theme.value === t}
 					onclick={() => setTheme(t)}>{t}</button
 				>
 			{/each}
@@ -398,8 +375,6 @@
 		{@render section('Account', 'The server this window is signed in to', account)}
 		{#if desktop}
 			{@render section('Network drive', `Shows this server in ${fileManager} as a drive`, drive)}
-		{/if}
-		{#if desktop}
 			{@render section('Startup', 'What happens when you log in.', startup)}
 			{@render section('Background', 'What happens when you close window', background)}
 			{@render section('Updates', 'Check new versions and install in place', updates)}

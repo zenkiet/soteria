@@ -33,33 +33,18 @@ export const validName = (name: string, taken: string[]) => {
 
 const ext = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 
-const icons: Record<string, 'image' | 'video' | 'archive' | 'sheet' | 'doc'> = {
-	jpg: 'image',
-	jpeg: 'image',
-	png: 'image',
-	gif: 'image',
-	webp: 'image',
-	heic: 'image',
-	svg: 'image',
-	mp4: 'video',
-	mov: 'video',
-	mkv: 'video',
-	webm: 'video',
-	zip: 'archive',
-	gz: 'archive',
-	tar: 'archive',
-	rar: 'archive',
-	'7z': 'archive',
-	xlsx: 'sheet',
-	xls: 'sheet',
-	csv: 'sheet',
-	numbers: 'sheet',
-	pdf: 'doc',
-	md: 'doc',
-	txt: 'doc',
-	doc: 'doc',
-	docx: 'doc'
-};
+const table = <K extends string>(o: Record<K, string>) =>
+	Object.fromEntries(
+		Object.entries<string>(o).flatMap(([k, v]) => v.split(' ').map((x) => [x, k]))
+	) as Record<string, K>;
+
+const icons = table({
+	image: 'jpg jpeg png gif webp heic svg',
+	video: 'mp4 mov mkv webm',
+	archive: 'zip gz tar rar 7z',
+	sheet: 'xlsx xls csv numbers',
+	doc: 'pdf md txt doc docx'
+});
 
 type Named = { name: string; dir: boolean; contentType?: string };
 
@@ -69,23 +54,23 @@ export const kind = (e: Named) =>
 	e.dir ? 'Folder' : e.name.includes('.') ? ext(e.name).toUpperCase() : e.contentType || 'File';
 
 export const parent = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/';
+export const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 export const join = (dir: string, name: string) => (dir === '/' ? '' : dir) + '/' + name;
 export const filesHref = (p: string) => '/files' + p.split('/').map(encodeURIComponent).join('/');
+export const focusHref = (p: string) => filesHref(parent(p)) + '?focus=' + encodeURIComponent(p);
+export const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+export const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0);
 
-export type Preview = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'docx';
+const previews = table({
+	image: 'jpg jpeg png gif webp heic bmp avif svg',
+	pdf: 'pdf',
+	video: 'mp4 mov m4v webm',
+	audio: 'mp3 m4a wav aac flac',
+	text: 'txt md json log csv xml yaml yml toml ini conf js ts go py css html sh sql',
+	docx: 'docx'
+});
 
-const previews = Object.fromEntries(
-	Object.entries({
-		image: 'jpg jpeg png gif webp heic bmp avif svg',
-		pdf: 'pdf',
-		video: 'mp4 mov m4v webm',
-		audio: 'mp3 m4a wav aac flac',
-		text: 'txt md json log csv xml yaml yml toml ini conf js ts go py css html sh sql',
-		docx: 'docx'
-	}).flatMap(([k, v]) => v.split(' ').map((x) => [x, k]))
-) as Record<string, Preview>;
-
-export const previewKind = (name: string): Preview | null => previews[ext(name)] ?? null;
+export const previewKind = (name: string) => previews[ext(name)] ?? null;
 export const previewUrl = (path: string) => '/preview?path=' + encodeURIComponent(path);
 export const thumbUrl = (path: string, v: string) =>
 	'/thumb?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(v);

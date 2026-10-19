@@ -26,6 +26,7 @@ type transfer struct {
 	domain.Transfer
 	cancel context.CancelFunc
 	done   chan error
+	run    job
 }
 
 type job func(ctx context.Context, progress func(int64)) error
@@ -36,19 +37,19 @@ var errStalled = errors.New("no data for 60 s")
 
 // Transfers is the queue: three at a time, retries on network trouble, progress on the "transfer" event.
 type Transfers struct {
-	mu       sync.Mutex
-	s        *Session
-	ev       Events
-	index    *Index
-	ts       []*transfer
-	sem      chan struct{}
-	dragging []domain.Entry
+	mu    sync.Mutex
+	s     *Session
+	ev    Events
+	index *Index
+	ts    []*transfer
+	sem   chan struct{}
+	walks map[string]context.CancelFunc
 	// OnChange fires on "queued" and every final state; the tray derives its badge and notifications from it.
 	OnChange func(status, kind string)
 }
 
 func NewTransfers(s *Session, idx *Index, ev Events) *Transfers {
-	return &Transfers{s: s, ev: ev, index: idx, sem: make(chan struct{}, 3)}
+	return &Transfers{s: s, ev: ev, index: idx, sem: make(chan struct{}, 3), walks: map[string]context.CancelFunc{}}
 }
 
 func (a *Transfers) changed(status, kind string) {
@@ -63,15 +64,18 @@ func (a *Transfers) enqueue(t domain.Transfer, run job) *transfer {
 		t.ID = rand.Text()
 	}
 	t.Status, t.Done, t.Error = "queued", 0, ""
-	tr := &transfer{Transfer: t, cancel: cancel, done: make(chan error, 1)}
+	tr := &transfer{Transfer: t, cancel: cancel, done: make(chan error, 1), run: run}
 	a.mu.Lock()
 	a.ts = append(a.ts, tr)
 	a.mu.Unlock()
 	a.emit(tr)
 	a.changed("queued", t.Kind)
 	go func() {
-		a.sem <- struct{}{}
-		defer func() { <-a.sem }()
+		select {
+		case a.sem <- struct{}{}:
+			defer func() { <-a.sem }()
+		case <-ctx.Done():
+		}
 		var err error
 		for attempt := 1; ctx.Err() == nil; attempt++ {
 			a.update(tr, "running", nil)
@@ -186,6 +190,9 @@ func (a *Transfers) Cancel(id string) {
 func (a *Transfers) CancelGroup(group string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if stop := a.walks[group]; stop != nil {
+		stop()
+	}
 	for _, t := range a.ts {
 		if t.Group == group {
 			t.cancel()
@@ -193,10 +200,9 @@ func (a *Transfers) CancelGroup(group string) {
 	}
 }
 
-// Retry re-queues a finished transfer under the same ID.
+// Retry re-queues a finished transfer under the same ID with its own job, so it keeps its server and resumes.
 func (a *Transfers) Retry(id string) error {
-	c, err := a.s.Client()
-	if err != nil {
+	if _, err := a.s.Client(); err != nil {
 		return err
 	}
 	a.mu.Lock()
@@ -205,21 +211,23 @@ func (a *Transfers) Retry(id string) error {
 		a.mu.Unlock()
 		return nil
 	}
-	t := a.ts[i].Transfer
+	t := a.ts[i]
 	a.ts = slices.Delete(a.ts, i, i+1)
 	a.mu.Unlock()
-	if t.Kind == "download" {
-		a.enqueue(t, fetch(c, t.Remote, t.Local))
-	} else {
-		a.enqueue(t, upload(c, t.Local, t.Remote, t.Total))
-	}
+	a.enqueue(t.Transfer, t.run)
 	return nil
 }
 
 func (a *Transfers) Clear() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.ts = slices.DeleteFunc(a.ts, func(t *transfer) bool { return t.Status != "queued" && t.Status != "running" })
+	a.ts = slices.DeleteFunc(a.ts, func(t *transfer) bool {
+		done := t.Status != "queued" && t.Status != "running"
+		if done && t.Kind == "download" {
+			os.Remove(t.Local + ".part")
+		}
+		return done
+	})
 }
 
 type counter struct {
@@ -293,15 +301,28 @@ func (a *Transfers) put(c *webdav.Client, local, remote string, st os.FileInfo) 
 		a.enqueue(domain.Transfer{Kind: "upload", Name: st.Name(), Remote: remote, Local: local, Total: st.Size()}, upload(c, local, remote, st.Size()))
 		return
 	}
+	ctx, stop := context.WithCancel(context.Background())
+	a.mu.Lock()
+	a.walks[remote] = stop
+	a.mu.Unlock()
 	go func() {
+		defer func() {
+			a.mu.Lock()
+			delete(a.walks, remote)
+			a.mu.Unlock()
+			stop()
+		}()
 		_ = filepath.WalkDir(local, func(p string, d fs.DirEntry, err error) error {
+			if ctx.Err() != nil {
+				return filepath.SkipAll
+			}
 			if err != nil {
 				return nil
 			}
 			rel, _ := filepath.Rel(local, p)
 			target := path.Join(remote, filepath.ToSlash(rel))
 			if d.IsDir() {
-				if c.Mkcol(context.Background(), target) == nil {
+				if c.Mkcol(ctx, target) == nil {
 					a.index.Put(domain.Entry{Name: path.Base(target), Path: target, Dir: true, Modified: time.Now()})
 				}
 				return nil
@@ -310,7 +331,10 @@ func (a *Transfers) put(c *webdav.Client, local, remote string, st os.FileInfo) 
 			if err != nil {
 				return nil
 			}
-			a.enqueue(domain.Transfer{Kind: "upload", Group: remote, Name: filepath.ToSlash(rel), Remote: target, Local: p, Total: info.Size()}, upload(c, p, target, info.Size()))
+			// A cancel that lands between the check above and here would otherwise miss this file.
+			if tr := a.enqueue(domain.Transfer{Kind: "upload", Group: remote, Name: filepath.ToSlash(rel), Remote: target, Local: p, Total: info.Size()}, upload(c, p, target, info.Size())); ctx.Err() != nil { //nolint:contextcheck // transfers outlive the walk, whose context stops when it ends
+				tr.cancel()
+			}
 			return nil
 		})
 	}()
@@ -344,6 +368,15 @@ func upload(c *webdav.Client, local, remote string, size int64) job {
 	}
 }
 
+// free picks a local name no file or queued download already claims.
+func (a *Transfers) free(p string) string {
+	ts := a.List()
+	return domain.FreeName(p, func(q string) bool {
+		_, err := os.Stat(q)
+		return err == nil || slices.ContainsFunc(ts, func(t domain.Transfer) bool { return t.Local == q })
+	})
+}
+
 func downloadDir(dest string) string {
 	if dest != "" {
 		return dest
@@ -370,10 +403,7 @@ func (a *Transfers) Download(remote string, size int64, dest string) (string, er
 	if err != nil {
 		return "", err
 	}
-	local := domain.FreeName(filepath.Join(downloadDir(dest), name), func(p string) bool {
-		_, err := os.Stat(p)
-		return err == nil
-	})
+	local := a.free(filepath.Join(downloadDir(dest), name))
 	return a.enqueue(domain.Transfer{Kind: "download", Name: path.Base(remote), Remote: remote, Local: local, Total: size}, fetch(c, remote, local)).ID, nil
 }
 
@@ -383,16 +413,23 @@ func (a *Transfers) DownloadDir(remote, dest string) error {
 	if err != nil {
 		return err
 	}
-	entries, err := c.Tree(context.Background(), remote, nil)
-	if err != nil {
-		return err
-	}
 	name, err := localName(path.Base(remote))
 	if err != nil {
 		return err
 	}
-	base := filepath.Join(downloadDir(dest), name)
-	_ = os.MkdirAll(base, 0o755)
+	_, err = a.queueTree(c, remote, a.free(filepath.Join(downloadDir(dest), name)))
+	return err
+}
+
+func (a *Transfers) queueTree(c *webdav.Client, remote, base string) ([]*transfer, error) {
+	entries, err := c.Tree(context.Background(), remote, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return nil, err
+	}
+	var ts []*transfer
 	for _, e := range entries {
 		rel := strings.TrimPrefix(e.Path, remote+"/")
 		lrel, err := localName(rel)
@@ -405,9 +442,9 @@ func (a *Transfers) DownloadDir(remote, dest string) error {
 			continue
 		}
 		_ = os.MkdirAll(filepath.Dir(local), 0o755)
-		a.enqueue(domain.Transfer{Kind: "download", Group: remote, Name: rel, Remote: e.Path, Local: local, Total: e.Size}, fetch(c, e.Path, local))
+		ts = append(ts, a.enqueue(domain.Transfer{Kind: "download", Group: remote, Name: rel, Remote: e.Path, Local: local, Total: e.Size}, fetch(c, e.Path, local)))
 	}
-	return nil
+	return ts, nil
 }
 
 // fetch resumes a retry from the .part file while the server still vouches (If-Range) for the same version.
@@ -444,7 +481,7 @@ func fetch(c *webdav.Client, remote, local string) job {
 		_, err = io.Copy(f, &counter{Reader: resp.Body, n: have, f: progress})
 		f.Close()
 		if err != nil {
-			if ctx.Err() != nil {
+			if errors.Is(context.Cause(ctx), context.Canceled) {
 				os.Remove(part)
 			}
 			return err
@@ -453,26 +490,19 @@ func fetch(c *webdav.Client, remote, local string) job {
 	}
 }
 
-// SetDragging remembers the entries of the drag in progress so DragWrite knows their sizes.
-func (a *Transfers) SetDragging(entries []domain.Entry) {
-	a.mu.Lock()
-	a.dragging = entries
-	a.mu.Unlock()
-}
-
-// DragWrite downloads remote to the path the OS chose for a dragged-out file and blocks until done.
-func (a *Transfers) DragWrite(remote, local string) error {
+// DragWrite downloads remote, a file or a whole folder, to the path the OS chose on drop and blocks until done.
+func (a *Transfers) DragWrite(e domain.Entry, local string) error {
 	c, err := a.s.Client()
 	if err != nil {
 		return err
 	}
-	var size int64
-	a.mu.Lock()
-	for _, e := range a.dragging {
-		if e.Path == remote {
-			size = e.Size
-		}
+	if !e.Dir {
+		return <-a.enqueue(domain.Transfer{Kind: "download", Name: path.Base(e.Path), Remote: e.Path, Local: local, Total: e.Size}, fetch(c, e.Path, local)).done
 	}
-	a.mu.Unlock()
-	return <-a.enqueue(domain.Transfer{Kind: "download", Name: path.Base(remote), Remote: remote, Local: local, Total: size}, fetch(c, remote, local)).done
+	ts, err := a.queueTree(c, e.Path, local)
+	errs := []error{err}
+	for _, t := range ts {
+		errs = append(errs, <-t.done)
+	}
+	return errors.Join(errs...)
 }

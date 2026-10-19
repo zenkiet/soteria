@@ -14,6 +14,8 @@ type Mounter struct {
 	// Adopt takes over a staged write whose PUT failed.
 	Adopt func(local, remote string, size int64)
 	mu    sync.Mutex
+	// busy serialises Mount and Unmount so a second tray click can't start a second mount.
+	busy sync.Mutex
 }
 
 func New(client func() (*webdav.Client, error), onChange func()) *Mounter {

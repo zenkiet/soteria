@@ -27,9 +27,7 @@ func notifyFirstInstance() {
 	id := "wails-app-" + singleInstanceID
 	cls, _ := windows.UTF16PtrFromString(id + "-sic")
 	name, _ := windows.UTF16PtrFromString(id + "-siw")
-	// HWND_MESSAGE is (HWND)-3.
-	const hwndMessage = ^uintptr(2)
-	hwnd, _, _ := pFindWindowEx.Call(hwndMessage, 0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(name)))
+	hwnd, _, _ := pFindWindowEx.Call(w32.HWND_MESSAGE, 0, uintptr(unsafe.Pointer(cls)), uintptr(unsafe.Pointer(name)))
 	if hwnd == 0 {
 		return
 	}
@@ -47,9 +45,9 @@ func notifyFirstInstance() {
 		CbData: uint32(len(payload) * 2),
 		LpData: uintptr(unsafe.Pointer(&payload[0])),
 	}
-	const wmCopyData, smtoAbortIfHung = 0x004A, 0x0002
+	const smtoAbortIfHung = 0x0002
 	var res uintptr
 	// The timeout keeps a hung first instance from stranding this process.
-	_, _, _ = pSendMessageTimeout.Call(hwnd, wmCopyData, 0, uintptr(unsafe.Pointer(&cds)), smtoAbortIfHung, 5000, uintptr(unsafe.Pointer(&res)))
+	_, _, _ = pSendMessageTimeout.Call(hwnd, w32.WM_COPYDATA, 0, uintptr(unsafe.Pointer(&cds)), smtoAbortIfHung, 5000, uintptr(unsafe.Pointer(&res)))
 	os.Exit(0)
 }

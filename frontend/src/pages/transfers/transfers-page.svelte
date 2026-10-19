@@ -6,18 +6,17 @@
 		Retry,
 		Reveal,
 		Transfers,
+		live,
 		transfers,
 		type Transfer
 	} from '#/shared/api/index.ts';
-	import { bytes, fileManager } from '#/shared/lib/index.ts';
+	import { base, bytes, fileManager, parent, sum } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
-	const live = (t: Transfer) => t.status === 'running' || t.status === 'queued';
 	const active = $derived(transfers.list.filter(live));
 	const finished = $derived(transfers.list.filter((t) => !live(t)).reverse());
 	const groups = $derived([...new Set(active.map((t) => t.group).filter(Boolean))]);
 	const pct = (t: Transfer) => (t.total ? Math.round((t.done / t.total) * 100) : 0);
-	const sum = (ts: Transfer[], f: (t: Transfer) => number) => ts.reduce((s, t) => s + f(t), 0);
 
 	async function clear() {
 		await Clear();
@@ -29,14 +28,13 @@
 	{@const all = transfers.list.filter((t) => t.group === g)}
 	{@const done = sum(all, (t) => t.done)}
 	{@const total = sum(all, (t) => t.total)}
+	{@const up = all[0]?.kind === 'upload'}
 	<div class="my-1.5 flex items-center gap-3.5 rounded-lg border border-line py-3 pr-3 pl-3.5">
 		<Icon name="folderFill" size={28} />
 		<div class="flex min-w-0 flex-1 flex-col gap-1.5">
 			<div class="flex justify-between gap-3">
 				<span class="truncate font-medium"
-					>{all[0]?.kind === 'download' ? 'Downloading' : 'Uploading'} folder “{g.slice(
-						g.lastIndexOf('/') + 1
-					)}”{all[0]?.kind === 'upload' ? ` to ${g.slice(0, g.lastIndexOf('/')) || '/'}` : ''}</span
+					>{up ? 'Uploading' : 'Downloading'} folder “{base(g)}”{up ? ` to ${parent(g)}` : ''}</span
 				>
 				<span class="font-mono text-xs text-fg-3">
 					{all.filter((t) => t.status === 'done').length} / {all.length} files
@@ -110,7 +108,7 @@
 		<section class="flex flex-col gap-1">
 			<h2 class="font-medium">Active <span class="font-normal text-fg-3">{active.length}</span></h2>
 			{#each groups as g (g)}{@render group(g)}{/each}
-			{#each active as t (t.id)}{@render row(t)}{/each}
+			{#each active.filter((t) => !t.group) as t (t.id)}{@render row(t)}{/each}
 		</section>
 	{/if}
 	{#if finished.length}

@@ -32,9 +32,15 @@
 		else if (ev.key === 'ArrowRight') go(1);
 	}
 
+	async function get(u: string, init?: RequestInit) {
+		const r = await fetch(u, init);
+		if (!r.ok) throw new Error(await r.text());
+		return r;
+	}
+
 	// Only the first MiB: a multi-gigabyte log would otherwise hang the webview.
 	async function text(u: string) {
-		const r = await fetch(u, { headers: { Range: 'bytes=0-1048575' } });
+		const r = await get(u, { headers: { Range: 'bytes=0-1048575' } });
 		const t = await r.text();
 		return Number(r.headers.get('Content-Range')?.split('/')[1]) > 1 << 20 ? t + '\n…' : t;
 	}
@@ -43,7 +49,7 @@
 	async function docx(u: string) {
 		const [{ default: mammoth }, arrayBuffer] = await Promise.all([
 			import('mammoth'),
-			fetch(u).then((r) => r.arrayBuffer())
+			get(u).then((r) => r.arrayBuffer())
 		]);
 		const { value } = await mammoth.convertToHtml({ arrayBuffer });
 		const doc = new DOMParser().parseFromString(value, 'text/html');

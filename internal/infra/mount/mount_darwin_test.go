@@ -12,11 +12,11 @@ import (
 
 func TestLoopbackProxy(t *testing.T) {
 	var gotPath, gotDest, gotAuth string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	up := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotDest, gotAuth = r.URL.Path, r.Header.Get("Destination"), r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusCreated)
 	}))
-	defer up.Close()
+	up.Start()
 	c, _ := webdav.New(domain.Server{URL: up.URL + "/dav", Username: "u"}, "p")
 	m := New(func() (*webdav.Client, error) { return c, nil }, nil)
 	if err := m.serveLoopback(); err != nil {

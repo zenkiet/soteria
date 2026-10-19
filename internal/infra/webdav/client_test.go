@@ -1,7 +1,6 @@
 package webdav
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,7 +19,7 @@ const sample = `<?xml version="1.0" encoding="utf-8"?>
 </D:multistatus>`
 
 func TestListAndQuota(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if u, p, _ := r.BasicAuth(); u != "pos" || p != "secret" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -28,13 +27,13 @@ func TestListAndQuota(t *testing.T) {
 		w.WriteHeader(http.StatusMultiStatus)
 		_, _ = w.Write([]byte(sample))
 	}))
-	defer srv.Close()
+	srv.Start()
 
 	c, err := New(domain.Server{URL: srv.URL + "/dav/", Username: "pos"}, "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := c.List(context.Background(), "/")
+	got, err := c.List(t.Context(), "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,13 +41,13 @@ func TestListAndQuota(t *testing.T) {
 		got[1].Dir || got[1].Path != "/store-front.jpg" || got[1].Size != 3548112 || got[1].ContentType != "image/jpeg" {
 		t.Fatalf("unexpected entries: %+v", got)
 	}
-	q, err := c.Quota(context.Background())
+	q, err := c.Quota(t.Context())
 	if err != nil || q.Used != 1000 || q.Available != 9000 {
 		t.Fatalf("quota %+v, %v", q, err)
 	}
 
 	bad, _ := New(domain.Server{URL: srv.URL, Username: "pos"}, "wrong")
-	if _, err := bad.List(context.Background(), "/"); err == nil || err.Error() != "invalid username or password" {
+	if _, err := bad.List(t.Context(), "/"); err == nil || err.Error() != "invalid username or password" {
 		t.Fatalf("want auth error, got %v", err)
 	}
 	if err := statusError(http.StatusPreconditionFailed, "MOVE", "/x"); err.Error() != "something with that name already exists there" {
@@ -59,7 +58,7 @@ func TestListAndQuota(t *testing.T) {
 // SabreDAV answers Depth: infinity as Depth: 1; the walk must still find everything and fail on a broken folder.
 func TestTreeFallback(t *testing.T) {
 	tree := map[string][]string{"/": {"Photos/", "notes.txt"}, "/Photos/": {"cat.png"}, "/x/": {"broken/"}}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		if p[len(p)-1] != '/' {
 			p += "/"
@@ -79,23 +78,23 @@ func TestTreeFallback(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(body + `</D:multistatus>`))
 	}))
-	defer srv.Close()
+	srv.Start()
 
 	c, _ := New(domain.Server{URL: srv.URL, Username: "u"}, "p")
-	entries, err := c.Tree(context.Background(), "/", func(domain.IndexStatus) {})
+	entries, err := c.Tree(t.Context(), "/", func(domain.IndexStatus) {})
 	if err != nil || len(entries) != 3 {
 		t.Fatalf("tree: %v %+v", err, entries)
 	}
-	if _, err := c.Tree(context.Background(), "/x", nil); err == nil {
+	if _, err := c.Tree(t.Context(), "/x", nil); err == nil {
 		t.Fatal("a folder that fails to list must fail the walk")
 	}
 }
 
 func TestRestQuota(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/api/quota/u" && r.Method == http.MethodGet:
-			_, _ = w.Write([]byte(`{"username":"u","quota_size":100,"used_quota_size":30}`))
+		case r.URL.Path == "/api/quota/Kiệt u" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"username":"Kiệt u","quota_size":100,"used_quota_size":30}`))
 		case r.Method == "PROPFIND":
 			w.WriteHeader(http.StatusMultiStatus)
 			_, _ = w.Write([]byte(`<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/dav/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`))
@@ -103,14 +102,14 @@ func TestRestQuota(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer srv.Close()
-	c, _ := New(domain.Server{URL: srv.URL + "/dav", Username: "u"}, "p")
-	q, err := c.Quota(context.Background())
+	srv.Start()
+	c, _ := New(domain.Server{URL: srv.URL + "/dav", Username: "Kiệt u"}, "p")
+	q, err := c.Quota(t.Context())
 	if err != nil || q.Used != 30 || q.Available != 70 {
 		t.Fatalf("quota via proxy: %+v %v", q, err)
 	}
 	c2, _ := New(domain.Server{URL: srv.URL + "/dav", Username: "other"}, "p")
-	if q, _ := c2.Quota(context.Background()); q.Used != -1 {
+	if q, _ := c2.Quota(t.Context()); q.Used != -1 {
 		t.Fatalf("quota for unknown user should stay unknown, got %+v", q)
 	}
 }

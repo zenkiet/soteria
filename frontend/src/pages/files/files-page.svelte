@@ -36,6 +36,7 @@
 		ago,
 		bytes,
 		filesHref,
+		focusHref,
 		iconFor,
 		join,
 		kind,
@@ -43,9 +44,9 @@
 		msg,
 		net,
 		parent,
+		plural,
 		prefs,
 		previewKind,
-		previewUrl,
 		setPrefs,
 		thumbUrl,
 		toast,
@@ -128,11 +129,11 @@
 	}
 
 	const shownName = (e: Entry) => prefs.hidden || !e.name.startsWith('.');
-	const visible = $derived(
-		entries
-			.filter((e) => shownName(e) && e.name.toLowerCase().includes(query.toLowerCase()))
-			.sort(compare)
-	);
+	const sorted = $derived(entries.filter(shownName).sort(compare));
+	const visible = $derived.by(() => {
+		const q = query.toLowerCase();
+		return sorted.filter((e) => e.name.toLowerCase().includes(q));
+	});
 	const folders = $derived(visible.filter((e) => e.dir));
 	const files = $derived(visible.filter((e) => !e.dir));
 	const rows = $derived([...folders, ...files]);
@@ -219,8 +220,18 @@
 		load(dir);
 	});
 
+	let pending: ReturnType<typeof Search> | undefined;
+	function search() {
+		pending?.cancel();
+		pending = Search(query);
+		pending.then(
+			(r) => (results = r ?? []),
+			() => {}
+		);
+	}
+
 	$effect(() => {
-		if (searching) Search(query).then((r) => (results = r ?? []));
+		if (searching) search();
 	});
 
 	$effect(() => {
@@ -231,21 +242,15 @@
 		if (idx?.done)
 			untrack(() => {
 				loadUsage(dir);
-				if (searching) Search(query).then((r) => (results = r ?? []));
+				if (searching) search();
 			});
 	});
 
-	$effect(() =>
-		Events.On('dropped', (ev) =>
-			Upload(ev.data.files, ev.data.dir || dir)
-				.then(queueConflicts)
-				.catch((e) => toast(msg(e), 'error'))
-		)
-	);
+	$effect(() => Events.On('dropped', (ev) => upload(Upload(ev.data.files, ev.data.dir || dir))));
 
 	let reload: ReturnType<typeof setTimeout>;
-	$effect(() =>
-		Events.On('transfer', (ev) => {
+	$effect(() => {
+		const off = Events.On('transfer', (ev) => {
 			const t = ev.data;
 			if (t.id === opening && t.status === 'done') {
 				opening = '';
@@ -254,11 +259,19 @@
 			if (t.kind !== 'upload' || t.status !== 'done' || parent(t.remote) !== dir) return;
 			clearTimeout(reload);
 			reload = setTimeout(() => load(dir), 500);
-		})
-	);
+		});
+		return () => {
+			off();
+			clearTimeout(reload);
+		};
+	});
 
 	function queueConflicts(cs: Conflict[] | null) {
 		if (cs?.length) conflicts = [...conflicts, ...cs];
+	}
+
+	function upload(p: Promise<Conflict[] | null>) {
+		p.then(queueConflicts, (e) => toast(msg(e), 'error'));
 	}
 
 	function resolve(mode: Resolution, all: boolean) {
@@ -304,7 +317,6 @@
 
 	async function trashAll(items: Entry[]) {
 		sel.clear();
-		menu = null;
 		const moved: string[] = [];
 		try {
 			await each(items, async (e) => moved.push(await Trash(e.path)));
@@ -350,7 +362,6 @@
 	}
 
 	function duplicate(e: Entry) {
-		menu = null;
 		run(() => Copy(e.path, join(dir, dup(e))), `Duplicated ${e.name}`);
 	}
 
@@ -367,7 +378,7 @@
 						? Move(e.path, join(dir, e.name))
 						: Copy(e.path, join(dir, entries.some((x) => x.name === e.name) ? dup(e) : e.name))
 				),
-			`${c.cut ? 'Moved' : 'Pasted'} ${items.length} ${items.length === 1 ? 'item' : 'items'}`
+			`${c.cut ? 'Moved' : 'Pasted'} ${plural(items.length, 'item')}`
 		);
 	}
 
@@ -379,7 +390,6 @@
 	}
 
 	async function downloadAll(items: Entry[]) {
-		menu = null;
 		try {
 			const dest = prefs.askDownloadDir ? await PickFolder() : prefs.downloadDir;
 			if (prefs.askDownloadDir && !dest) return;
@@ -395,12 +405,9 @@
 
 	async function copyLink(e: Entry) {
 		// soteria://files/<path> mirrors the SPA route; a file links to its folder, focused.
-		const route = e.dir
-			? filesHref(e.path)
-			: filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path);
+		const route = e.dir ? filesHref(e.path) : focusHref(e.path);
 		await Clipboard.SetText('soteria:/' + route);
 		toast('Link copied');
-		menu = null;
 	}
 
 	let cursor = '';
@@ -436,7 +443,7 @@
 		else if (parent(e.path) === dir) {
 			query = '';
 			select([e.path]);
-		} else goto(filesHref(parent(e.path)) + '?focus=' + encodeURIComponent(e.path));
+		} else goto(focusHref(e.path));
 	}
 
 	function showAreaMenu(ev: MouseEvent) {
@@ -455,8 +462,9 @@
 		role: 'button',
 		tabindex: 0,
 		'data-path': e.path,
+		'data-selected': sel.has(e.path) || undefined,
 		'data-file-drop-target': e.dir && !draggingOut ? true : undefined,
-		draggable: !e.dir,
+		draggable: true,
 		onclick: (ev: MouseEvent) => pick(e, ev),
 		onkeydown: (ev: KeyboardEvent) => ev.key === 'Enter' && openEntry(e),
 		ondblclick: () => openEntry(e),
@@ -503,7 +511,7 @@
 		else if ((k === 'c' || k === 'x') && picked.length) clip = { items: picked, cut: k === 'x' };
 		else if (k === 'v') paste();
 		else if (k === 'r') refresh();
-		else if (k === 'u') PickUploads(dir).then(queueConflicts);
+		else if (k === 'u') upload(PickUploads(dir));
 		else if (k === 'n' && ev.shiftKey) open('mkdir', []);
 		else return;
 		ev.preventDefault();
@@ -520,31 +528,16 @@
 	$effect(() => Events.On('dragend', () => (draggingOut = false)));
 
 	function dragStart(ev: DragEvent, e: Entry) {
-		const items = (sel.has(e.path) ? picked : [e]).filter((x) => !x.dir);
-		if (!items.length) {
-			ev.preventDefault();
-			return;
-		}
+		ev.preventDefault();
 		draggingOut = true;
-		if (mac) {
-			ev.preventDefault();
-			DragOut(items).catch((err) => {
-				draggingOut = false;
-				toast(msg(err), 'error');
-			});
-		} else {
-			ev.dataTransfer?.setData(
-				'DownloadURL',
-				items
-					.map((x) => `application/octet-stream:${x.name}:${location.origin}${previewUrl(x.path)}`)
-					.join('\n')
-			);
-		}
+		DragOut(sel.has(e.path) ? picked : [e]).catch((err) => {
+			draggingOut = false;
+			toast(msg(err), 'error');
+		});
 	}
 
 	const cols =
 		'grid-cols-[minmax(0,1fr)_90px_170px_36px] @4xl:grid-cols-[minmax(0,1fr)_120px_90px_170px_170px_36px]';
-	const on = (e: Entry) => sel.has(e.path);
 	const mod = mac ? '⌘' : 'Ctrl+';
 </script>
 
@@ -565,6 +558,13 @@
 	</button>
 {/snippet}
 
+{#snippet opt(label: string, on: boolean, run: () => void)}
+	<button class="menu-item" onclick={run}>
+		<span class="flex-1">{label}</span>
+		{#if on}<Icon name="check" size={14} class="text-accent-fg" />{/if}
+	</button>
+{/snippet}
+
 {#snippet item(icon: IconName, label: string, run: () => unknown, key = '', disabled = false)}
 	<button class="menu-item" {disabled} onclick={run}>
 		<Icon name={icon} size={15} class="text-fg-2" />{label}{#if key}<kbd class="ml-auto">{key}</kbd
@@ -582,11 +582,7 @@
 
 {#snippet row(e: Entry)}
 	<div
-		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_2.75rem] [content-visibility:auto] hover:bg-surface-2 {cols} {on(
-			e
-		)
-			? 'bg-accent-soft hover:bg-accent-soft'
-			: ''}"
+		class="grid h-11 items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_2.75rem] [content-visibility:auto] hover:bg-surface-2 data-selected:bg-accent-soft {cols}"
 		{...entryProps(e)}
 	>
 		<div class="flex min-w-0 items-center gap-2.5">
@@ -656,20 +652,11 @@
 					Sort by
 				</div>
 				{#each SORTS as [k, l] (k)}
-					<button class="menu-item" onclick={() => setPrefs({ sort: k })}>
-						<span class="flex-1">{l}</span>
-						{#if prefs.sort === k}<Icon name="check" size={14} class="text-accent-fg" />{/if}
-					</button>
+					{@render opt(l, prefs.sort === k, () => setPrefs({ sort: k }))}
 				{/each}
 				<hr class="my-1 border-line" />
-				<button class="menu-item" onclick={() => setPrefs({ asc: true })}>
-					<span class="flex-1">Ascending</span>
-					{#if prefs.asc}<Icon name="check" size={14} class="text-accent-fg" />{/if}
-				</button>
-				<button class="menu-item" onclick={() => setPrefs({ asc: false })}>
-					<span class="flex-1">Descending</span>
-					{#if !prefs.asc}<Icon name="check" size={14} class="text-accent-fg" />{/if}
-				</button>
+				{@render opt('Ascending', prefs.asc, () => setPrefs({ asc: true }))}
+				{@render opt('Descending', !prefs.asc, () => setPrefs({ asc: false }))}
 				<hr class="my-1 border-line" />
 				<button
 					class="menu-item"
@@ -691,20 +678,14 @@
 		{/if}
 	</div>
 	<div class="inline-flex gap-0.5 rounded-md border border-line p-0.5">
-		<button
-			class="flex h-6.5 w-7 items-center justify-center rounded {prefs.view === 'list'
-				? 'bg-surface-2 text-fg'
-				: 'text-fg-3 hover:text-fg'}"
-			onclick={() => setPrefs({ view: 'list' })}
-			aria-label="List view"><Icon name="list" size={15} /></button
-		>
-		<button
-			class="flex h-6.5 w-7 items-center justify-center rounded {prefs.view === 'card'
-				? 'bg-surface-2 text-fg'
-				: 'text-fg-3 hover:text-fg'}"
-			onclick={() => setPrefs({ view: 'card' })}
-			aria-label="Card view"><Icon name="grid" size={15} /></button
-		>
+		{#each [['list', 'list', 'List view'], ['card', 'grid', 'Card view']] as const as [v, icon, label] (v)}
+			<button
+				class="flex h-6.5 w-7 items-center justify-center rounded text-fg-3 hover:text-fg aria-pressed:bg-surface-2 aria-pressed:text-fg"
+				aria-pressed={prefs.view === v}
+				onclick={() => setPrefs({ view: v })}
+				aria-label={label}><Icon name={icon} size={15} /></button
+			>
+		{/each}
 	</div>
 	<button class="btn btn-ghost btn-icon" onclick={refresh} disabled={spinning} aria-label="Refresh">
 		<Icon name="refresh" size={15} class={spinning ? 'animate-spin' : ''} />
@@ -712,7 +693,7 @@
 	<button class="btn" onclick={() => open('mkdir', [])}>
 		<Icon name="folderPlus" size={15} />New folder
 	</button>
-	<button class="btn btn-primary" onclick={() => PickUploads(dir).then(queueConflicts)}>
+	<button class="btn btn-primary" onclick={() => upload(PickUploads(dir))}>
 		<Icon name="upload" size={15} />Upload
 	</button>
 </header>
@@ -728,18 +709,12 @@
 		<div class="@container flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto p-6">
 			{#if query.trim()}
 				<div class="flex items-center gap-3.5">
-					<div class="inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5">
-						<button
-							class="rounded px-3 py-1 text-xs font-medium {scope === 'folder'
-								? 'bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-								: 'text-fg-2'}"
-							onclick={() => (scope = 'folder')}>This folder</button
+					<div class="seg">
+						<button aria-pressed={scope === 'folder'} onclick={() => (scope = 'folder')}
+							>This folder</button
 						>
-						<button
-							class="rounded px-3 py-1 text-xs font-medium {scope === 'all'
-								? 'bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-								: 'text-fg-2'}"
-							onclick={() => (scope = 'all')}>Everywhere</button
+						<button aria-pressed={scope === 'all'} onclick={() => (scope = 'all')}
+							>Everywhere</button
 						>
 					</div>
 					{#if searching}
@@ -775,11 +750,7 @@
 					{#each hits as e (e.path)}
 						{@const i = e.name.toLowerCase().indexOf(query.trim().toLowerCase())}
 						<div
-							class="grid h-13 grid-cols-[minmax(0,1fr)_90px_170px_36px] items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto] hover:bg-surface-2 {on(
-								e
-							)
-								? 'bg-accent-soft hover:bg-accent-soft'
-								: ''}"
+							class="grid h-13 grid-cols-[minmax(0,1fr)_90px_170px_36px] items-center gap-3 rounded-md border-t border-line px-2 [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto] hover:bg-surface-2 data-selected:bg-accent-soft"
 							{...entryProps(e)}
 							draggable={false}
 							onclick={() => openResult(e)}
@@ -813,7 +784,7 @@
 				<div class="skeleton flex flex-col gap-7">
 					{#if prefs.view === 'card'}
 						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-							{#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as i (i)}
+							{#each { length: 10 }}
 								<div class="flex flex-col gap-3 overflow-hidden rounded-lg border border-line">
 									<div class="h-24 bg-surface-2"></div>
 									<div class="flex flex-col gap-2 px-3 pb-3">
@@ -824,7 +795,7 @@
 							{/each}
 						</div>
 					{:else}
-						{#each [1, 2, 3, 4, 5, 6, 7, 8] as i (i)}
+						{#each { length: 8 }}
 							<div class="flex h-11 items-center gap-3 border-t border-line px-2">
 								<div class="h-4.5 w-4.5 rounded bg-surface-2"></div>
 								<div class="h-3 max-w-60 flex-1 rounded bg-surface-2"></div>
@@ -846,7 +817,7 @@
 						<p class="mt-1.5 max-w-90 text-fg-2">Drop files here to upload them to {dir}.</p>
 					</div>
 					<div class="flex gap-2">
-						<button class="btn btn-primary" onclick={() => PickUploads(dir).then(queueConflicts)}>
+						<button class="btn btn-primary" onclick={() => upload(PickUploads(dir))}>
 							<Icon name="upload" size={15} />Upload
 						</button>
 						<button class="btn" onclick={() => open('mkdir', [])}>
@@ -863,11 +834,7 @@
 						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each folders as e (e.path)}
 								<div
-									class="flex flex-col gap-3.5 rounded-lg border bg-surface p-3.5 hover:bg-surface-2 {on(
-										e
-									)
-										? 'border-accent bg-accent-soft hover:bg-accent-soft'
-										: 'border-line'}"
+									class="flex flex-col gap-3.5 rounded-lg border border-line bg-surface p-3.5 hover:bg-surface-2 data-selected:border-accent data-selected:bg-accent-soft"
 									{...entryProps(e)}
 								>
 									<Icon name="folderFill" size={36} />
@@ -888,11 +855,7 @@
 						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each files as e (e.path)}
 								<div
-									class="flex flex-col overflow-hidden rounded-lg border bg-surface hover:bg-surface-2 {on(
-										e
-									)
-										? 'border-accent bg-accent-soft hover:bg-accent-soft'
-										: 'border-line'}"
+									class="flex flex-col overflow-hidden rounded-lg border border-line bg-surface hover:bg-surface-2 data-selected:border-accent data-selected:bg-accent-soft"
 									{...entryProps(e)}
 								>
 									<div
@@ -973,12 +936,7 @@
 	>
 		{#if !m.items.length}
 			{@render item('folderPlus', 'New folder', () => open('mkdir', []), `⇧${mod}N`)}
-			{@render item(
-				'upload',
-				'Upload files…',
-				() => PickUploads(dir).then(queueConflicts),
-				`${mod}U`
-			)}
+			{@render item('upload', 'Upload files…', () => upload(PickUploads(dir)), `${mod}U`)}
 			{@render item(
 				'copy',
 				`Paste${clip ? ` ${clip.items.length} ${clip.items.length === 1 ? 'item' : 'items'}` : ''}`,

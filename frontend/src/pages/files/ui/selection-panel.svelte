@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Entry } from '#/shared/api/index.ts';
-	import { bytes, iconFor } from '#/shared/lib/index.ts';
+	import { bytes, iconFor, plural } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
-	export type BulkAction = 'download' | 'move' | 'delete';
+	type BulkAction = 'download' | 'move' | 'delete';
 
 	let {
 		items,
@@ -13,7 +13,6 @@
 
 	const files = $derived(items.filter((e) => !e.dir));
 	const total = $derived(files.reduce((s, e) => s + e.size, 0));
-	const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 </script>
 
 <aside class="slide-in flex w-80 shrink-0 flex-col gap-4 overflow-hidden border-l border-line p-5">

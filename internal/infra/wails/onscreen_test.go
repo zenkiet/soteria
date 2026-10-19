@@ -26,11 +26,11 @@ func TestOnScreen(t *testing.T) {
 		{100, -2000, 1280, false},
 	}
 	for _, c := range cases {
-		if got := onScreen(screens, c.x, c.y, c.w); got != c.want {
+		if got := onScreen(screens, application.Rect{X: c.x, Y: c.y, Width: c.w}); got != c.want {
 			t.Errorf("onScreen(%d,%d,%d) = %v, want %v", c.x, c.y, c.w, got, c.want)
 		}
 	}
-	if !onScreen(nil, 9999, 9999, 100) {
+	if !onScreen(nil, application.Rect{X: 9999, Y: 9999, Width: 100}) {
 		t.Error("empty screens must fail open")
 	}
 }

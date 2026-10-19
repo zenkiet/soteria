@@ -4,5 +4,9 @@
 		"sourceMap": true,
 		"strict": true
 	},
-	"include": ["src", "vite.config.ts"]
+	"include": [
+		"src",
+		"vite.config.ts",
+		"bindings/github.com/wailsapp/wails/v3/internal/eventdata.d.ts"
+	]
 }

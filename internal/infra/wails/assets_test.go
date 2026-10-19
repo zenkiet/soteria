@@ -12,7 +12,7 @@ import (
 
 func TestPreviewProxy(t *testing.T) {
 	png := []byte("\x89PNG fake body")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/dav/Product Photos/a.png" || r.Method != http.MethodGet {
 			t.Errorf("unexpected upstream request %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -29,7 +29,7 @@ func TestPreviewProxy(t *testing.T) {
 		}
 		_, _ = w.Write(png)
 	}))
-	defer srv.Close()
+	srv.Start()
 
 	c, _ := webdav.New(domain.Server{URL: srv.URL + "/dav", Username: "pos"}, "x")
 	s := &app.Session{}
