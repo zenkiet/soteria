@@ -14,3 +14,4 @@ func (m *Mounter) Drive() domain.Drive          { return domain.Drive{} }
 func (m *Mounter) Mount() (domain.Drive, error) { return domain.Drive{}, errNoDrive }
 func (m *Mounter) Unmount() error               { return nil }
 func (m *Mounter) InstallDriver() error         { return errNoDrive }
+func (m *Mounter) Saving() int                  { return 0 }

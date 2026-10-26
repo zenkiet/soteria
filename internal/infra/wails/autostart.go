@@ -2,6 +2,7 @@ package wails
 
 import (
 	"errors"
+	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -23,5 +24,10 @@ func (a *App) SetLaunchAtLogin(on bool) error {
 	if !on {
 		return application.Get().Autostart.Disable()
 	}
-	return application.Get().Autostart.Enable()
+	// macOS gives no way to start hidden; Windows starts in the tray when background mode is on.
+	var opts application.AutostartOptions
+	if runtime.GOOS == "windows" {
+		opts.Arguments = []string{"--hidden"}
+	}
+	return application.Get().Autostart.EnableWithOptions(opts)
 }

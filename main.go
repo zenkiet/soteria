@@ -25,7 +25,7 @@ func main() {
 	idx := app.NewIndex(sess, ev)
 	tr := app.NewTransfers(sess, idx, ev)
 	trash := &app.Trash{S: sess, Index: idx}
-	mnt := mount.New(sess.Client, idx.ReindexLater)
+	mnt := mount.New(sess.Client, idx)
 	mnt.Adopt = tr.Adopt
 	sess.OnConnect = func(c *webdav.Client) {
 		idx.Restore()

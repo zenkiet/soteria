@@ -90,7 +90,13 @@
 		driveError
 			? { text: driveError, cls: 'text-danger', dot: 'bg-danger' }
 			: busy
-				? { text: 'Connecting…', cls: 'text-fg-2', dot: 'bg-warn' }
+				? {
+						text: windows
+							? 'Connecting… Windows may ask to install WinFsp, a free driver'
+							: 'Connecting…',
+						cls: 'text-fg-2',
+						dot: 'bg-warn'
+					}
 				: info?.mounted
 					? { text: `Connected · ${info.path}`, cls: 'text-fg-2', dot: 'bg-ok' }
 					: { text: 'Not connected', cls: 'text-fg-3', dot: 'bg-line-2' }
@@ -152,7 +158,10 @@
 		<span class="flex flex-col gap-0.5">
 			<span>Open Soteria when you log in</span>
 			<span class="text-xs {loginError ? 'text-danger' : 'text-fg-3'}">
-				{loginError || 'The window still opens; macOS gives no way to start hidden.'}
+				{loginError ||
+					(windows
+						? 'Starts in the system tray while background mode is on.'
+						: 'The window still opens; macOS gives no way to start hidden.')}
 			</span>
 		</span>
 		<input
@@ -164,7 +173,7 @@
 	</label>
 	{@render toggle(
 		'Reconnect to the last server',
-		'Sign in again with the password in the Keychain, so the drive comes back on its own.',
+		'Sign in again with the saved password, so the drive comes back on its own.',
 		prefs.reconnect,
 		(reconnect) => setPrefs({ reconnect })
 	)}
@@ -240,7 +249,7 @@
 	<div class="flex items-center justify-between gap-6">
 		<div class="min-w-0">
 			<div>Save to</div>
-			<div class="truncate font-mono text-xs text-fg-3">{prefs.downloadDir || '~/Downloads'}</div>
+			<div class="truncate font-mono text-xs text-fg-3">{prefs.downloadDir || 'Downloads'}</div>
 		</div>
 		<button class="btn" onclick={pickDir}>Change…</button>
 	</div>
@@ -259,7 +268,7 @@
 	<div class="flex items-center justify-between gap-6">
 		<div class="min-w-0">
 			<div>Log file</div>
-			<div class="truncate font-mono text-xs text-fg-3">{logPath}</div>
+			<div class="truncate font-mono text-xs text-fg-3 select-text">{logPath}</div>
 		</div>
 		<button class="btn" onclick={() => Open(logPath.replace(/[\\/][^\\/]*$/, ''))}>
 			<Icon name="open" size={15} />Open folder

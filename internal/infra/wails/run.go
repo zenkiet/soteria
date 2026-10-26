@@ -62,11 +62,13 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	})
 
 	opts := application.WebviewWindowOptions{
-		Title:          "Soteria",
-		Frameless:      runtime.GOOS == "windows",
-		Width:          1280,
-		Height:         800,
-		EnableFileDrop: true,
+		Title:              "Soteria",
+		Width:              1280,
+		Height:             800,
+		EnableFileDrop:     true,
+		ZoomControlEnabled: true,
+		// Launch at login passes this on Windows, where the tray can stand in for the window.
+		Hidden: slices.Contains(os.Args[1:], "--hidden"),
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 52,
 			TitleBar:                application.MacTitleBarHiddenInset,
@@ -77,14 +79,9 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 		BackgroundColour: application.NewRGB(246, 245, 241),
 		URL:              "/",
 	}
-	if runtime.GOOS == "windows" {
-		// Mica on Windows 11 (blur on 10) shows through wherever the page leaves its background transparent.
-		opts.BackgroundType = application.BackgroundTypeTranslucent
-		opts.Windows.BackdropType = application.Mica
-	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-		opts.MinWidth = 1280
-		opts.MinHeight = 600
+		opts.MinWidth = 1024
+		opts.MinHeight = 500
 	}
 	// Deliberately no saved position: a spot on a lost monitor strands the window off-screen.
 	a.state = store.LoadWindow()
@@ -92,8 +89,9 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 		opts.Width, opts.Height = a.state.W, a.state.H
 	}
 	win := wapp.Window.NewWithOptions(opts)
-	a.win = win
+	a.win, a.hidden = win, opts.Hidden
 	a.trackWindow(win)
+	win.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) { a.fit() })
 	// Background mode: the close button hides instead of closing; Quit lives in the tray menu and ⌘Q.
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		if a.Bg.Enabled() {
@@ -128,6 +126,19 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 func onScreen(screens []*application.Screen, b application.Rect) bool {
 	top := application.Point{X: b.X + b.Width/2, Y: b.Y + 20}
 	return len(screens) == 0 || slices.ContainsFunc(screens, func(s *application.Screen) bool { return s.Bounds.Contains(top) })
+}
+
+// A size saved on a bigger monitor, or the default on a scaled laptop, would overflow the screen.
+func (a *App) fit() {
+	s, err := a.win.GetScreen()
+	if err != nil || s == nil || a.win.IsMaximised() || a.win.IsFullscreen() {
+		return
+	}
+	b, w := a.win.Bounds(), s.WorkArea
+	if b.Width > w.Width || b.Height > w.Height {
+		a.win.SetSize(min(b.Width, w.Width), min(b.Height, w.Height))
+		a.win.Center()
+	}
 }
 
 // One timer that resize events only push back: Wails runs each event listener in its own goroutine.

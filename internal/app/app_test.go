@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -104,11 +105,15 @@ func TestRetryKeepsID(t *testing.T) {
 	tr := transfers(s)
 	missing := filepath.Join(t.TempDir(), "missing")
 	id := tr.enqueue(domain.Transfer{Kind: "upload", Name: "x", Local: missing, Remote: "/x"}, upload(c, missing, "/x", 0)).ID
-	<-tr.ts[0].done
+	if err := <-tr.ts[0].done; err == nil {
+		t.Fatal("uploading a missing file must fail")
+	}
 	if err := tr.Retry(id); err != nil {
 		t.Fatal(err)
 	}
-	<-tr.ts[0].done
+	if err := <-tr.ts[0].done; err == nil {
+		t.Fatal("the retry must fail the same way")
+	}
 	if ts := tr.List(); len(ts) != 1 || ts[0].ID != id || ts[0].Status != "error" {
 		t.Fatalf("retry: %+v", ts)
 	}
@@ -124,7 +129,9 @@ func TestCancelWhileQueued(t *testing.T) {
 		q := tr.enqueue(domain.Transfer{}, block)
 		synctest.Wait()
 		q.cancel()
-		<-q.done
+		if err := <-q.done; !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled while queued: %v", err)
+		}
 		if n := tr.Running(); n != 3 {
 			t.Fatalf("a cancelled queued transfer still counts: %d running", n)
 		}
@@ -150,6 +157,24 @@ func TestStallKeepsPart(t *testing.T) {
 	if st, err := os.Stat(local + ".part"); err != nil || st.Size() != 4 {
 		t.Fatalf("a stalled download must keep its .part for the retry: %v", err)
 	}
+}
+
+func TestSentBodyIsNotAStall(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		tr := transfers(&Session{})
+		err := <-tr.enqueue(domain.Transfer{Total: 3}, func(ctx context.Context, progress func(int64)) error {
+			progress(3)
+			select {
+			case <-time.After(2 * stallAfter):
+				return nil
+			case <-ctx.Done():
+				return context.Cause(ctx)
+			}
+		}).done
+		if err != nil {
+			t.Fatalf("waiting on the server after the last byte counted as a stall: %v", err)
+		}
+	})
 }
 
 func TestEnqueueRetriesNetworkErrors(t *testing.T) { synctest.Test(t, testEnqueueRetries) }
@@ -203,7 +228,7 @@ func TestFetchResumes(t *testing.T) {
 }
 
 func TestDragWriteFolder(t *testing.T) {
-	f := webdavtest.New(map[string]bool{"/": true, "/R": true, "/R/sub": true, "/R/empty": true}, map[string]string{"/R/a": "x", "/R/sub/b": "y"})
+	f := webdavtest.New(map[string]bool{"/": true, "/R": true, "/R/sub": true, "/R/empty": true}, map[string]string{"/R/a": "x", "/R/sub/b": "y", "/R/README": "1", "/R/readme": "2"})
 	srv := httptest.NewTestServer(t, f)
 	srv.Start()
 	tr := transfers(session(t, srv.URL))
@@ -216,6 +241,9 @@ func TestDragWriteFolder(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(local, "empty")); err != nil || string(a) != "x" || string(b) != "y" {
 		t.Fatalf("tree: a=%q b=%q empty=%v", a, b, err)
 	}
+	if ds, _ := os.ReadDir(local); len(ds) != 5 {
+		t.Fatalf("names differing only in case should both land: %v", ds)
+	}
 }
 
 func TestLocalName(t *testing.T) {
@@ -226,6 +254,11 @@ func TestLocalName(t *testing.T) {
 	}
 	if p, err := localName("a/b.txt"); err != nil || p != filepath.Join("a", "b.txt") {
 		t.Fatalf("localName: %q %v", p, err)
+	}
+	windowsNames = true
+	defer func() { windowsNames = runtime.GOOS == "windows" }()
+	if p, err := localName(`a:b/c?. `); err != nil || p != filepath.Join("a_b", "c_. _") {
+		t.Fatalf("windows name: %q %v", p, err)
 	}
 }
 

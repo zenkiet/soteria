@@ -34,17 +34,21 @@ func where() string {
 // SetBackground mirrors the two Settings switches; the frontend calls it on start and on change.
 func (a *App) SetBackground(on, notify bool) {
 	a.Bg.Set(on, notify)
+	// Started hidden at login, but without a tray icon there'd be no way back to the window.
+	if a.hidden && !on {
+		a.show("")
+	}
+	a.hidden = false
 	a.mu.Lock()
 	create, destroy := on && a.tray == nil, !on && a.tray != nil
 	if create {
 		a.tray = application.Get().SystemTray.New()
+		// Windows keeps the exe's colour icon: on a running Wails tray, setting the light or dark icon overwrites the other.
 		if runtime.GOOS == "darwin" {
 			a.tray.SetTemplateIcon(glyph(44, color.Black))
-		} else {
-			a.tray.SetIcon(glyph(32, color.Black)).SetDarkModeIcon(glyph(32, color.White))
 		}
 		if runtime.GOOS == "windows" {
-			a.tray.OnDoubleClick(func() { a.show("") })
+			a.tray.OnClick(func() { a.show("") })
 		}
 	}
 	if destroy {
@@ -64,9 +68,11 @@ func (a *App) refresh() {
 	n := a.T.Running()
 	awake.Hold(n > 0)
 	a.mu.Lock()
-	tray := a.tray
+	// Wails redraws the Windows badge from the font file each time, and this runs every 300 ms during transfers.
+	tray, badge := a.tray, n != a.badge
+	a.badge = n
 	a.mu.Unlock()
-	if a.Dock != nil {
+	if a.Dock != nil && badge {
 		if n > 0 {
 			_ = a.Dock.SetBadge(strconv.Itoa(n))
 		} else {
@@ -108,9 +114,9 @@ func (a *App) trayMenu(n int) *application.Menu {
 	m.AddSeparator()
 	if d := a.M.Drive(); d.Mounted {
 		m.Add("Show in " + where()).OnClick(func(*application.Context) { _ = shell.Open(d.Path) })
-		m.Add("Disconnect Drive").OnClick(func(*application.Context) { _ = a.M.Unmount(); a.refresh() })
+		m.Add("Disconnect Drive").OnClick(func(*application.Context) { a.driveDone(a.M.Unmount()) })
 	} else if cur != nil {
-		m.Add("Connect Drive").OnClick(func(*application.Context) { _, _ = a.M.Mount(); a.refresh() })
+		m.Add("Connect Drive").OnClick(func(*application.Context) { _, err := a.M.Mount(); a.driveDone(err) })
 	}
 	m.AddSeparator()
 	m.Add(quit).OnClick(func(*application.Context) { application.Get().Quit() })
@@ -126,6 +132,7 @@ func (a *App) show(path string) {
 		if !onScreen(application.Get().Screen.GetAll(), a.win.Bounds()) {
 			a.win.Center()
 		}
+		a.fit()
 		a.Dock.ShowAppIcon()
 		a.win.UnMinimise()
 		a.win.Show()
@@ -139,12 +146,21 @@ func (a *App) show(path string) {
 	}()
 }
 
+// The tray has no page to show a drive error on.
+func (a *App) driveDone(err error) {
+	if err != nil {
+		application.Get().Dialog.Error().SetTitle("Network drive").SetMessage(err.Error()).Show()
+	}
+	a.refresh()
+}
+
 // Show blocks on both platforms; the OnClick fallback covers a non-blocking dialog too.
 func (a *App) shouldQuit() bool {
-	if a.Bg.CanQuit() {
+	// Drive writes upload after the app that made them closed the file, so they count as transfers.
+	n := a.T.Running() + a.M.Saving()
+	if a.Bg.CanQuit(n) {
 		return true
 	}
-	n := a.T.Running()
 	verb := "are"
 	if n == 1 {
 		verb = "is"
@@ -154,7 +170,7 @@ func (a *App) shouldQuit() bool {
 	d.AddButton("Cancel").SetAsCancel()
 	d.AddButton("Quit anyway").OnClick(func() { a.Bg.ForceQuit(); application.Get().Quit() })
 	d.Show()
-	return a.Bg.CanQuit()
+	return a.Bg.CanQuit(n)
 }
 
 // The drained-queue notice gets one button: Retry while anything failed, else Show in Finder for the newest download.

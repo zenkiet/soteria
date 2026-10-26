@@ -13,12 +13,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"soteria/internal/domain"
+	"soteria/internal/infra/store"
 	"soteria/internal/infra/webdav"
 )
 
@@ -113,7 +115,12 @@ func (a *Transfers) attempt(ctx context.Context, tr *transfer, run job) error {
 	a.mu.Unlock()
 	last := time.Now()
 	err := run(actx, func(n int64) {
-		stall.Reset(stallAfter)
+		// Once every byte is out, waiting on the server isn't a stall.
+		if tr.Total > 0 && n >= tr.Total {
+			stall.Stop()
+		} else {
+			stall.Reset(stallAfter)
+		}
 		a.mu.Lock()
 		tr.Done = n
 		a.mu.Unlock()
@@ -377,21 +384,37 @@ func (a *Transfers) free(p string) string {
 	})
 }
 
-func downloadDir(dest string) string {
-	if dest != "" {
-		return dest
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "Downloads")
-}
+func downloadDir(dest string) string { return cmp.Or(dest, store.Downloads()) }
 
-// localName keeps a server path under the download folder: "..", or "a\b" on Windows, is refused.
+// A variable so tests can check the Windows rules on any OS.
+var windowsNames = runtime.GOOS == "windows"
+
+// localName keeps a server path under the download folder; on Windows, names it can't store get a stand-in instead of failing.
 func localName(rel string) (string, error) {
-	p, err := filepath.Localize(rel)
-	if err != nil {
-		return "", fmt.Errorf("%q can't be saved on this computer", rel)
+	segs := strings.Split(rel, "/")
+	for i, s := range segs {
+		if s == "" || s == "." || s == ".." {
+			return "", fmt.Errorf("%q can't be saved on this computer", rel)
+		}
+		if !windowsNames {
+			continue
+		}
+		s = strings.Map(func(r rune) rune {
+			if r < ' ' || strings.ContainsRune(`<>:"\|?*`, r) {
+				return '_'
+			}
+			return r
+		}, s)
+		// Windows drops a trailing dot or space, and Localize refuses device names like "aux.txt".
+		if strings.HasSuffix(s, ".") || strings.HasSuffix(s, " ") {
+			s += "_"
+		}
+		if _, err := filepath.Localize(s); err != nil {
+			s = "_" + s
+		}
+		segs[i] = s
 	}
-	return p, nil
+	return filepath.Join(segs...), nil
 }
 
 func (a *Transfers) Download(remote string, size int64, dest string) (string, error) {
@@ -430,6 +453,8 @@ func (a *Transfers) queueTree(c *webdav.Client, remote, base string) ([]*transfe
 		return nil, err
 	}
 	var ts []*transfer
+	// Windows and macOS folders ignore case, so "README" and "readme" would write the same file.
+	taken := map[string]bool{}
 	for _, e := range entries {
 		rel := strings.TrimPrefix(e.Path, remote+"/")
 		lrel, err := localName(rel)
@@ -441,6 +466,8 @@ func (a *Transfers) queueTree(c *webdav.Client, remote, base string) ([]*transfe
 			_ = os.MkdirAll(local, 0o755)
 			continue
 		}
+		local = domain.FreeName(local, func(q string) bool { return taken[strings.ToLower(q)] })
+		taken[strings.ToLower(local)] = true
 		_ = os.MkdirAll(filepath.Dir(local), 0o755)
 		ts = append(ts, a.enqueue(domain.Transfer{Kind: "download", Group: remote, Name: rel, Remote: e.Path, Local: local, Total: e.Size}, fetch(c, e.Path, local)))
 	}

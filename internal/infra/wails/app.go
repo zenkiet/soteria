@@ -3,6 +3,7 @@ package wails
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -41,6 +42,8 @@ type App struct {
 	blocked bool
 	auto    bool
 	link    string
+	hidden  bool
+	badge   int
 }
 
 // Drop is a file drop: the local paths and, when they landed on a folder row, that folder.
@@ -102,15 +105,25 @@ func (a *App) DownloadDir(remote, dest string) error { return a.T.DownloadDir(re
 func (a *App) Reveal(local string) error             { return shell.Reveal(local) }
 
 func (a *App) PickUploads(dir string) ([]domain.Conflict, error) {
-	files, err := application.Get().Dialog.OpenFile().SetTitle("Upload to " + dir).CanChooseDirectories(true).PromptForMultipleSelection()
-	if err != nil {
+	// Windows' picker can't mix files and folders, so it offers files; folders still upload by drag and drop.
+	files, err := application.Get().Dialog.OpenFile().SetTitle("Upload to " + dir).CanChooseDirectories(runtime.GOOS != "windows").PromptForMultipleSelection()
+	if err = cancelled(err); err != nil || len(files) == 0 {
 		return nil, err
 	}
 	return a.T.Upload(files, dir)
 }
 
 func (a *App) PickFolder() (string, error) {
-	return application.Get().Dialog.OpenFile().CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()
+	p, err := application.Get().Dialog.OpenFile().CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()
+	return p, cancelled(err)
+}
+
+// cancelled drops the error Windows pickers return when the user closes them.
+func cancelled(err error) error {
+	if err != nil && err.Error() == "cancelled by user" {
+		return nil
+	}
+	return err
 }
 
 func (a *App) Trash(p string) (string, error)         { return a.Tr.Trash(p) }

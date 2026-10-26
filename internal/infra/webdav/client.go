@@ -38,6 +38,8 @@ func New(s domain.Server, password string) (*Client, error) {
 	t.MaxIdleConnsPerHost, t.MaxConnsPerHost = 16, 16
 	// Uploads stay on HTTP/1.1: a Go HTTP/2 server (SFTPGo) gives each connection one 1 MiB window for every PUT on it.
 	t1 := t.Clone()
+	// A server may take minutes to store a big upload before it answers.
+	t1.ResponseHeaderTimeout = 10 * time.Minute
 	t1.Protocols = new(http.Protocols)
 	t1.Protocols.SetHTTP1(true)
 	return &Client{Base: u, User: s.Username, Pass: password, HTTP: &http.Client{Transport: t}, put: &http.Client{Transport: t1}}, nil
@@ -324,6 +326,11 @@ func (c *Client) Remove(ctx context.Context, p string) error { return c.exec(ctx
 
 func (c *Client) Move(ctx context.Context, from, to string) error {
 	return c.exec(ctx, "MOVE", from, "Destination", c.URL(to), "Overwrite", "F")
+}
+
+// Replace is a MOVE that overwrites the destination, as a filesystem rename does.
+func (c *Client) Replace(ctx context.Context, from, to string) error {
+	return c.exec(ctx, "MOVE", from, "Destination", c.URL(to), "Overwrite", "T")
 }
 
 func (c *Client) Copy(ctx context.Context, from, to string) error {

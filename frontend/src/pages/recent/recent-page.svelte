@@ -49,7 +49,7 @@
 	{#each groups as [label, list] (label)}
 		<section class="flex flex-col gap-1">
 			<h2 class="font-medium">{label} <span class="font-normal text-fg-3">{list.length}</span></h2>
-			<div class="reveal">
+			<div>
 				{#each list as e (e.path)}
 					<button
 						class="grid h-13 w-full grid-cols-[minmax(0,1fr)_90px_170px] items-center gap-3 border-t border-line px-2 text-left hover:bg-surface-2"

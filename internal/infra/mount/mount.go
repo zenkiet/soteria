@@ -4,13 +4,20 @@ package mount
 import (
 	"sync"
 
+	"soteria/internal/domain"
 	"soteria/internal/infra/webdav"
 )
 
+// Index is the search index, told what the drive changes.
+type Index interface {
+	Put(es ...domain.Entry)
+	Remove(p string)
+	Move(from, to string, keep bool)
+}
+
 type Mounter struct {
 	client func() (*webdav.Client, error)
-	// onChange lets the search index follow what the drive writes.
-	onChange func()
+	index  Index
 	// Adopt takes over a staged write whose PUT failed.
 	Adopt func(local, remote string, size int64)
 	mu    sync.Mutex
@@ -18,6 +25,6 @@ type Mounter struct {
 	busy sync.Mutex
 }
 
-func New(client func() (*webdav.Client, error), onChange func()) *Mounter {
-	return &Mounter{client: client, onChange: onChange}
+func New(client func() (*webdav.Client, error), index Index) *Mounter {
+	return &Mounter{client: client, index: index}
 }

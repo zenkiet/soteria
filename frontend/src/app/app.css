@@ -3,8 +3,9 @@
 
 @theme inline {
 	--font-sans:
-		'Montserrat Variable', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+		'Montserrat Variable', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Segoe UI',
+		sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, monospace;
 	--color-bg: var(--bg);
 	--color-surface: var(--surface);
 	--color-surface-2: var(--surface-2);
@@ -76,14 +77,26 @@
 		@apply rounded border border-line bg-surface-2 px-1 font-mono text-[11px] text-fg-3;
 	}
 	* {
-		scrollbar-width: none;
+		scrollbar-width: thin;
+		scrollbar-color: var(--line-2) transparent;
 	}
-	*::-webkit-scrollbar {
+	/* Wails drags the window from whatever element is pressed, so controls in a drag bar must opt out. */
+	:is(a, button, input, label, select, textarea, [role='menu']) {
+		--wails-draggable: no-drag;
+	}
+	/* Errors get quoted in bug reports. */
+	.text-danger:not(button),
+	[role='status'] span {
+		user-select: text;
+	}
+	/* WebView2 draws its own eye next to the app's. */
+	input::-ms-reveal {
 		display: none;
 	}
+	/* Wails finds the folder under a drop with elementFromPoint, which this overlay would answer instead. */
 	.file-drop-target-active::after {
 		content: attr(data-drop-label);
-		@apply absolute inset-3 z-10 grid place-content-center rounded-[10px] border-2 border-dashed border-accent bg-surface/90 text-[15px] font-semibold;
+		@apply pointer-events-none absolute inset-3 z-10 grid place-content-center rounded-[10px] border-2 border-dashed border-accent bg-surface/90 text-[15px] font-semibold;
 	}
 	[data-path].file-drop-target-active {
 		@apply bg-accent-soft ring-2 ring-accent;
@@ -98,15 +111,8 @@
 		opacity: 0;
 	}
 }
-@keyframes rise {
-	from {
-		opacity: 0;
-		translate: 0 8px;
-	}
-}
 @media (prefers-reduced-motion: no-preference) {
 	.pop,
-	.slide-in,
 	dialog[open] {
 		transition:
 			opacity 0.18s ease-out,
@@ -118,49 +124,8 @@
 			translate: 0 4px;
 		}
 	}
-	.slide-in {
-		@starting-style {
-			translate: 16px 0;
-		}
-	}
-	/* Capped: staggering every row of a large folder kept rows blank for seconds. */
-	.reveal > :nth-child(-n + 24) {
-		animation: rise 0.3s ease-out backwards;
-		animation-delay: calc(min(sibling-index(), 12) * 30ms);
-	}
 }
 @layer components {
-	/* Windows window controls, drawn like macOS traffic lights. */
-	.lights button {
-		position: relative;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--c);
-		box-shadow: inset 0 0 0 0.5px var(--r);
-		color: var(--i);
-	}
-	.lights button::after {
-		content: '';
-		position: absolute;
-		inset: -4px;
-	}
-	.lights svg {
-		width: 12px;
-		height: 12px;
-		fill: none;
-		stroke: currentColor;
-		stroke-width: 1.2;
-		stroke-linecap: round;
-		opacity: 0;
-	}
-	.lights:hover svg {
-		opacity: 1;
-	}
-	.lights.dim button {
-		background: var(--line-2);
-		box-shadow: none;
-	}
 	.seg {
 		@apply inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5;
 	}
@@ -274,24 +239,10 @@
 .doc a {
 	@apply text-accent-fg underline;
 }
-@media (prefers-reduced-motion: reduce) {
-	::view-transition-group(*),
-	::view-transition-old(*),
-	::view-transition-new(*) {
-		animation: none;
-	}
-}
 /* Unlayered on purpose: these must beat utilities like px-5 and flex. */
 .sidebar.gone {
 	display: none;
 }
 main[data-sidebar='hidden'] > header {
 	padding-left: calc(var(--lead) + 2.5rem);
-}
-/* Mica follows the system theme, so it shows through the sidebar only while the app does too. */
-:root[data-os='windows']:not([data-theme]) {
-	body,
-	.sidebar {
-		background: transparent;
-	}
 }

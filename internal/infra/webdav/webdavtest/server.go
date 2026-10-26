@@ -54,9 +54,16 @@ func (f *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "MOVE":
 		dst, _ := url.Parse(r.Header.Get("Destination"))
 		to := strings.TrimSuffix(dst.Path, "/")
-		if f.Files[to] != "" || f.Dirs[to] {
-			w.WriteHeader(http.StatusPreconditionFailed)
+		if _, ok := f.Files[p]; !ok && !f.Dirs[p] {
+			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+		if _, ok := f.Files[to]; ok || f.Dirs[to] {
+			if r.Header.Get("Overwrite") != "T" {
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
+			delete(f.Files, to)
 		}
 		for k, v := range f.Files {
 			if under(k, p) {

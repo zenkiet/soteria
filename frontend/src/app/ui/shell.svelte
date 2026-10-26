@@ -17,7 +17,7 @@
 		type QuotaInfo,
 		type Server
 	} from '#/shared/api/index.ts';
-	import { bytes, desktop, filesHref, net, prefs, setPrefs } from '#/shared/lib/index.ts';
+	import { bytes, desktop, filesHref, mac, net, prefs, setPrefs } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 	import DriveIntro from './drive-intro.svelte';
 	import UploadPanel from './upload-panel.svelte';
@@ -216,7 +216,7 @@
 	<main
 		class="relative flex min-w-0 flex-1 flex-col bg-surface"
 		data-sidebar={prefs.sidebarHidden ? 'hidden' : undefined}
-		style="--lead: {desktop ? '76px' : '12px'}"
+		style="--lead: {mac ? '76px' : '12px'}"
 	>
 		{@render children()}
 		{#if prefs.sidebarHidden}
@@ -257,7 +257,7 @@
 		{/if}
 		{#if route !== '/(app)/transfers'}<UploadPanel />{/if}
 		{#if desktop && !prefs.intro[server.id]}
-			<DriveIntro {server} folders={folders.map((f) => f.name)} />
+			<DriveIntro {server} />
 		{/if}
 	</main>
 </div>

@@ -15,7 +15,7 @@
 <div
 	popover="manual"
 	role="status"
-	class="pointer-events-none fixed inset-auto right-5 bottom-5 m-0 flex flex-col gap-2 overflow-visible border-0 bg-transparent p-0"
+	class="pointer-events-none fixed inset-auto bottom-5 left-1/2 m-0 flex -translate-x-1/2 flex-col gap-2 overflow-visible border-0 bg-transparent p-0"
 	{@attach raise}
 >
 	{#each toasts.list as t (t.id)}

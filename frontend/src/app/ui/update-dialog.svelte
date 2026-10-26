@@ -97,7 +97,7 @@
 		{#if mode === 'available' || busy}
 			{#if notes.length}
 				<div
-					class="flex flex-col gap-1 rounded-lg border border-line bg-bg px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-2"
+					class="flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border border-line bg-bg px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-2"
 				>
 					{#each notes as n, i (i)}
 						{#if n.h}

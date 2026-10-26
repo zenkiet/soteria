@@ -29,13 +29,19 @@ func Start(window unsafe.Pointer, entries []domain.Entry, drive func() domain.Dr
 	if !d.Mounted {
 		return errors.New("turn on the drive in Settings to drag items out")
 	}
+	defer func() {
+		if OnEnded != nil {
+			OnEnded()
+		}
+	}()
 	// GetAsyncKeyState reads physical buttons; left-handed setups drag with the right one.
 	vk := w32.VK_LBUTTON
 	if w32.GetSystemMetrics(w32.SM_SWAPBUTTON) != 0 {
 		vk = w32.VK_RBUTTON
 	}
+	// A quick flick ends before this runs; there's nothing left to drag.
 	if w32.GetAsyncKeyState(vk)&0x8000 == 0 {
-		return errors.New("no drag gesture in progress")
+		return nil
 	}
 	pidls := make([]uintptr, len(entries))
 	defer func() {
@@ -60,8 +66,5 @@ func Start(window unsafe.Pointer, entries []domain.Entry, drive func() domain.Dr
 	defer w32.ComRelease(obj)
 	var effect uint32
 	_, _, _ = shDoDragDrop.Call(uintptr(window), uintptr(unsafe.Pointer(obj)), 0, 1, uintptr(unsafe.Pointer(&effect)))
-	if OnEnded != nil {
-		OnEnded()
-	}
 	return nil
 }

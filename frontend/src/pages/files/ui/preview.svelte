@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Browser } from '@wailsio/runtime';
 	import type { Entry } from '#/shared/api/index.ts';
-	import { bytes, kind, parent, previewKind, previewUrl } from '#/shared/lib/index.ts';
+	import { bytes, kind, mac, parent, previewKind, previewUrl } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
 	let {
@@ -76,7 +76,7 @@
 	{onclose}
 	{@attach (d) => d.showModal()}
 >
-	<header class="page-header bg-surface pr-5 pl-21">
+	<header class="page-header bg-surface pr-5 {mac ? 'pl-21' : ''}">
 		<div class="min-w-0 flex-1">
 			<div class="truncate font-medium">{e.name}</div>
 			<div class="truncate text-xs text-fg-3">{parent(e.path)} · {kind(e)} · {bytes(e.size)}</div>

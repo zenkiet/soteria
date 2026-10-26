@@ -54,7 +54,7 @@
 				</p>
 			</div>
 			{#if servers.length}
-				<div class="reveal divide-y divide-line rounded-lg border border-line bg-surface">
+				<div class="divide-y divide-line rounded-lg border border-line bg-surface">
 					{#each servers as s (s.id)}
 						<div class="flex items-center gap-2 py-3.5 pr-3 pl-4">
 							<button

@@ -13,6 +13,7 @@ const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
 export const when = (iso: string) => (iso.startsWith('0001') ? '—' : date.format(new Date(iso)));
 
 import { OFFLINE, lost } from './net.svelte';
+import { mac } from './platform';
 
 export const msg = (e: unknown) => {
 	const m = e instanceof Error ? e.message : String(e);
@@ -62,7 +63,8 @@ export const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 export const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0);
 
 const previews = table({
-	image: 'jpg jpeg png gif webp heic bmp avif svg',
+	// Only WebKit decodes HEIC; WebView2 shows a broken image.
+	image: `jpg jpeg png gif webp bmp avif svg${mac ? ' heic' : ''}`,
 	pdf: 'pdf',
 	video: 'mp4 mov m4v webm',
 	audio: 'mp3 m4a wav aac flac',

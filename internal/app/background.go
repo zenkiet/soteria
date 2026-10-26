@@ -31,10 +31,10 @@ func (b *Background) Enabled() bool {
 }
 
 // CanQuit is true once nothing is running or the user confirmed quitting anyway.
-func (b *Background) CanQuit() bool {
+func (b *Background) CanQuit(running int) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.force || b.T.Running() == 0
+	return b.force || running == 0
 }
 
 func (b *Background) ForceQuit() {

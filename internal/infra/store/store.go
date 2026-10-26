@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"soteria/internal/domain"
 )
@@ -45,7 +46,13 @@ func WriteFile(name string, b []byte) error {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Rename(f.Name(), name)
+		// Defender or the search indexer can hold the old file open for a moment on Windows.
+		for range 5 {
+			if err = os.Rename(f.Name(), name); err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 	if err != nil {
 		os.Remove(f.Name())

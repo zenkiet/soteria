@@ -75,6 +75,9 @@ func (m *Mounter) Unmount() error {
 
 func (m *Mounter) InstallDriver() error { return nil }
 
+// Saving is always 0: Finder writes straight through to the server.
+func (m *Mounter) Saving() int { return 0 }
+
 // ln is the loopback proxy's listener, set once under Mounter.mu.
 var ln net.Listener
 

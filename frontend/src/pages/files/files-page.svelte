@@ -13,6 +13,7 @@
 		Download,
 		DownloadDir,
 		DragOut,
+		Drive,
 		FolderUsages,
 		Open,
 		List,
@@ -52,13 +53,13 @@
 		toast,
 		validName,
 		when,
+		windows,
 		type SortKey
 	} from '#/shared/lib/index.ts';
 	import { Dialog, Icon, type IconName } from '#/shared/ui/index.ts';
 	import ConflictDialog, { type Resolution } from './ui/conflict-dialog.svelte';
 	import MoveDialog from './ui/move-dialog.svelte';
 	import Preview from './ui/preview.svelte';
-	import SelectionPanel from './ui/selection-panel.svelte';
 
 	let { path = '' }: { path?: string } = $props();
 	const dir = $derived('/' + path.replace(/\/+$/, ''));
@@ -149,9 +150,8 @@
 		if (dir === d) usage = u;
 	}
 
-	// A newer load cancels the one in flight; the old folder stays on screen until the new one crossfades in.
+	// A newer load cancels the one in flight; the old folder stays on screen until the new one lands.
 	let listing: ReturnType<typeof List> | null = null;
-	let shownDir = '';
 	async function load(d: string) {
 		listing?.cancel();
 		const call = (listing = List(d));
@@ -159,14 +159,7 @@
 		try {
 			const list = (await call) ?? [];
 			if (call !== listing) return;
-			const swap = () => {
-				entries = list;
-				return tick();
-			};
-			if (d !== shownDir && 'startViewTransition' in document)
-				await document.startViewTransition(swap).updateCallbackDone;
-			else await swap();
-			shownDir = d;
+			entries = list;
 			loadUsage(d);
 			error = '';
 			const f = page.url.searchParams.get('focus');
@@ -464,7 +457,7 @@
 		'data-path': e.path,
 		'data-selected': sel.has(e.path) || undefined,
 		'data-file-drop-target': e.dir && !draggingOut ? true : undefined,
-		draggable: true,
+		draggable: canDrag,
 		onclick: (ev: MouseEvent) => pick(e, ev),
 		onkeydown: (ev: KeyboardEvent) => ev.key === 'Enter' && openEntry(e),
 		ondblclick: () => openEntry(e),
@@ -491,11 +484,12 @@
 			sortOpen = false;
 			return;
 		}
-		if (ev.target instanceof HTMLInputElement || preview || dialog) return;
+		if (ev.target instanceof HTMLInputElement || preview || document.querySelector('dialog[open]'))
+			return;
 		const mod = ev.metaKey || ev.ctrlKey;
 		const step = { ArrowDown: 1, ArrowUp: -1 }[ev.key] ?? 0;
 		const k = ev.key.toLowerCase();
-		if (step && mod) {
+		if (step && (mod || ev.altKey)) {
 			if (step < 0 && dir !== '/') goto(filesHref(parent(dir)));
 		} else if (step) {
 			const i = shown.findIndex((e) => e.path === cursor);
@@ -506,8 +500,16 @@
 		} else if (ev.key === ' ' && !(ev.target instanceof HTMLButtonElement)) {
 			if (single && !single.dir) preview = single;
 			else return;
-		} else if (!mod) return;
+		} else if (ev.key === 'Delete' || (mod && ev.key === 'Backspace')) {
+			if (picked.length) trashAll(picked);
+			else return;
+		} else if (ev.key === 'F2') {
+			if (single) open('rename', [single]);
+			else return;
+		} else if (ev.key === 'F5') refresh();
+		else if (!mod) return;
 		else if (k === 'a') select(shown.map((e) => e.path));
+		else if (k === 'f') document.querySelector<HTMLInputElement>('header input')?.focus();
 		else if ((k === 'c' || k === 'x') && picked.length) clip = { items: picked, cut: k === 'x' };
 		else if (k === 'v') paste();
 		else if (k === 'r') refresh();
@@ -526,6 +528,10 @@
 
 	let draggingOut = $state(false);
 	$effect(() => Events.On('dragend', () => (draggingOut = false)));
+	// Windows drags out through the drive, so rows only drag while it is mounted.
+	let canDrag = $state(!windows);
+	const checkDrive = () => windows && Drive().then((d) => (canDrag = d.mounted));
+	checkDrive();
 
 	function dragStart(ev: DragEvent, e: Entry) {
 		ev.preventDefault();
@@ -544,7 +550,10 @@
 <svelte:window
 	onclick={clicked}
 	onkeydown={keys}
-	onfocus={() => Date.now() - loadedAt > 5000 && load(dir)}
+	onfocus={() => {
+		checkDrive();
+		if (Date.now() - loadedAt > 5000) load(dir);
+	}}
 />
 
 {#snippet head(k: SortKey, text: string, cls = 'flex')}
@@ -630,7 +639,10 @@
 			class="w-full bg-transparent text-fg outline-none"
 			placeholder="Search"
 			bind:value={query}
-			onkeydown={(e) => e.key === 'Enter' && (scope = 'all')}
+			onkeydown={(e) => {
+				if (e.key === 'Enter') scope = 'all';
+				if (e.key === 'Escape') query = '';
+			}}
 		/>
 	</label>
 	<div class="relative">
@@ -746,7 +758,7 @@
 			{#if error}
 				<p class="text-danger">{error}</p>
 			{:else if searching}
-				<div class="reveal">
+				<div>
 					{#each hits as e (e.path)}
 						{@const i = e.name.toLowerCase().indexOf(query.trim().toLowerCase())}
 						<div
@@ -831,7 +843,7 @@
 						<h2 class="font-medium">
 							Folders <span class="font-normal text-fg-3">{folders.length}</span>
 						</h2>
-						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each folders as e (e.path)}
 								<div
 									class="flex flex-col gap-3.5 rounded-lg border border-line bg-surface p-3.5 hover:bg-surface-2 data-selected:border-accent data-selected:bg-accent-soft"
@@ -852,7 +864,7 @@
 						<h2 class="font-medium">
 							Files <span class="font-normal text-fg-3">{files.length}</span>
 						</h2>
-						<div class="reveal grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+						<div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
 							{#each files as e (e.path)}
 								<div
 									class="flex flex-col overflow-hidden rounded-lg border border-line bg-surface hover:bg-surface-2 data-selected:border-accent data-selected:bg-accent-soft"
@@ -891,25 +903,13 @@
 						{@render head('created', 'Created', 'hidden @4xl:flex')}
 						<div></div>
 					</div>
-					<div class="reveal">
+					<div>
 						{#each rows as e (e.path)}{@render row(e)}{/each}
 					</div>
 				</section>
 			{/if}
 		</div>
 	</div>
-	{#if picked.length > 1}
-		<SelectionPanel
-			items={picked}
-			onaction={(a) =>
-				a === 'download'
-					? downloadAll(picked)
-					: a === 'delete'
-						? trashAll(picked)
-						: open(a, picked)}
-			onclose={() => sel.clear()}
-		/>
-	{/if}
 </div>
 
 {#if preview}
@@ -935,7 +935,12 @@
 		role="menu"
 	>
 		{#if !m.items.length}
-			{@render item('folderPlus', 'New folder', () => open('mkdir', []), `⇧${mod}N`)}
+			{@render item(
+				'folderPlus',
+				'New folder',
+				() => open('mkdir', []),
+				mac ? '⇧⌘N' : 'Ctrl+Shift+N'
+			)}
 			{@render item('upload', 'Upload files…', () => upload(PickUploads(dir)), `${mod}U`)}
 			{@render item(
 				'copy',
@@ -958,7 +963,7 @@
 			{/if}
 			{@render item('download', `Download${n}`, () => downloadAll(m.items))}
 			{#if one}
-				{@render item('pencil', 'Rename', () => open('rename', [one]))}
+				{@render item('pencil', 'Rename', () => open('rename', [one]), 'F2')}
 				{@render item('link', 'Copy Link', () => copyLink(one))}
 			{/if}
 			<hr class="my-1 border-line" />

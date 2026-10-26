@@ -19,7 +19,8 @@ func Log() *slog.Logger {
 	}
 	var w io.Writer = os.Stderr
 	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-		w = io.MultiWriter(os.Stderr, f)
+		// File first: a Windows GUI exe has no stderr, and MultiWriter stops at the first writer that fails.
+		w = io.MultiWriter(f, os.Stderr)
 	}
 	l := slog.New(slog.NewTextHandler(w, nil))
 	slog.SetDefault(l)
