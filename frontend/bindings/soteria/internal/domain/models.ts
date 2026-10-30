@@ -26,6 +26,14 @@ export interface Entry {
     "contentType": string;
 }
 
+/**
+ * Found is the best matches of a search and how many matched in all.
+ */
+export interface Found {
+    "entries": Entry[] | null;
+    "total": number;
+}
+
 export interface IndexStatus {
     "count": number;
     "folders": number;

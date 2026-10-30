@@ -29,6 +29,7 @@ type transfer struct {
 	cancel context.CancelFunc
 	done   chan error
 	run    job
+	unsent bool
 }
 
 type job func(ctx context.Context, progress func(int64)) error
@@ -37,13 +38,14 @@ const stallAfter = 60 * time.Second
 
 var errStalled = errors.New("no data for 60 s")
 
-// Transfers is the queue: three at a time, retries on network trouble, progress on the "transfer" event.
+// Transfers is the queue: three at a time, retries on network trouble, progress in batches on the "transfers" event.
 type Transfers struct {
 	mu    sync.Mutex
 	s     *Session
 	ev    Events
 	index *Index
 	ts    []*transfer
+	out   []*transfer
 	sem   chan struct{}
 	walks map[string]context.CancelFunc
 	// OnChange fires on "queued" and every final state; the tray derives its badge and notifications from it.
@@ -155,11 +157,30 @@ func (a *Transfers) update(tr *transfer, status string, err error) {
 	}
 }
 
+// A folder upload changes thousands of transfers at once, and WebView2 runs every event as an eval on its UI thread.
 func (a *Transfers) emit(tr *transfer) {
 	a.mu.Lock()
-	snap := tr.Transfer
+	defer a.mu.Unlock()
+	if len(a.out) == 0 {
+		time.AfterFunc(150*time.Millisecond, a.send)
+	}
+	if !tr.unsent {
+		tr.unsent = true
+		a.out = append(a.out, tr)
+	}
+}
+
+func (a *Transfers) send() {
+	a.mu.Lock()
+	batch := make([]domain.Transfer, len(a.out))
+	for i, tr := range a.out {
+		batch[i], tr.unsent = tr.Transfer, false
+	}
+	a.out = a.out[:0]
 	a.mu.Unlock()
-	a.ev.Emit("transfer", snap)
+	if len(batch) > 0 {
+		a.ev.Emit("transfers", batch)
+	}
 }
 
 func (a *Transfers) List() []domain.Transfer {
@@ -228,12 +249,14 @@ func (a *Transfers) Retry(id string) error {
 func (a *Transfers) Clear() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	finished := func(t *transfer) bool { return t.Status != "queued" && t.Status != "running" }
+	// Still waiting in a batch, a cleared transfer would reappear in the UI.
+	a.out = slices.DeleteFunc(a.out, finished)
 	a.ts = slices.DeleteFunc(a.ts, func(t *transfer) bool {
-		done := t.Status != "queued" && t.Status != "running"
-		if done && t.Kind == "download" {
+		if finished(t) && t.Kind == "download" {
 			os.Remove(t.Local + ".part")
 		}
-		return done
+		return finished(t)
 	})
 }
 
@@ -468,7 +491,6 @@ func (a *Transfers) queueTree(c *webdav.Client, remote, base string) ([]*transfe
 		}
 		local = domain.FreeName(local, func(q string) bool { return taken[strings.ToLower(q)] })
 		taken[strings.ToLower(local)] = true
-		_ = os.MkdirAll(filepath.Dir(local), 0o755)
 		ts = append(ts, a.enqueue(domain.Transfer{Kind: "download", Group: remote, Name: rel, Remote: e.Path, Local: local, Total: e.Size}, fetch(c, e.Path, local)))
 	}
 	return ts, nil
@@ -500,6 +522,8 @@ func fetch(c *webdav.Client, remote, local string) job {
 			f, err = os.OpenFile(part, os.O_WRONLY|os.O_APPEND, 0)
 		} else {
 			have = 0
+			// A deleted Downloads or custom folder comes back rather than failing every download.
+			_ = os.MkdirAll(filepath.Dir(local), 0o755)
 			f, err = os.Create(part)
 		}
 		if err != nil {

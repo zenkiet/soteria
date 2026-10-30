@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"image"
-	"image/jpeg"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"net/http"
@@ -44,10 +44,10 @@ func TestSearch(t *testing.T) {
 	idx := NewIndex(&Session{}, noEvents{})
 	idx.entries = map[string]item{}
 	idx.Put(domain.Entry{Name: "Photos", Path: "/Photos", Dir: true}, domain.Entry{Name: "cat.png", Path: "/Photos/cat.png", Size: 5}, domain.Entry{Name: "notes.txt", Path: "/notes.txt"})
-	if got := idx.Search("CAT"); len(got) != 1 || got[0].Path != "/Photos/cat.png" {
+	if got := idx.Search("CAT", "", 0, false).Entries; len(got) != 1 || got[0].Path != "/Photos/cat.png" {
 		t.Fatalf("search: %+v", got)
 	}
-	if got := idx.Search(" "); len(got) != 0 {
+	if got := idx.Search(" ", "", 0, false).Entries; len(got) != 0 {
 		t.Fatalf("blank query should match nothing, got %d", len(got))
 	}
 	if got := idx.Recent(5); len(got) != 2 {
@@ -56,15 +56,53 @@ func TestSearch(t *testing.T) {
 	if u := idx.Usages("/"); len(u) != 1 || u["/Photos"] != (domain.Usage{Known: true, Items: 1, Bytes: 5}) {
 		t.Fatalf("usages: %+v", u)
 	}
+	if got := idx.Search("", "images", 0, false).Entries; len(got) != 1 || got[0].Path != "/Photos/cat.png" {
+		t.Fatalf("type filter alone is a query: %+v", got)
+	}
+	if got := idx.Search("cat", "", time.Now().Unix(), false).Entries; len(got) != 0 {
+		t.Fatalf("an unknown modified time is older than any since: %+v", got)
+	}
+	if n := idx.Bytes(); n != 5 {
+		t.Fatalf("bytes: %d", n)
+	}
+	idx.Put(domain.Entry{Name: "cat", Path: "/cat", Dir: true}, domain.Entry{Name: "._cat.png", Path: "/._cat.png"})
+	if f := idx.Search("cat", "", 0, false); f.Total != 2 || f.Entries[0].Path != "/cat" {
+		t.Fatalf("exact name first, junk left out: %+v", f)
+	}
+	idx.Put(domain.Entry{Name: "config", Path: "/.git/config"})
+	if got := idx.Recent(5); len(got) != 2 {
+		t.Fatalf("recent skips junk and dot folders: %+v", got)
+	}
+	idx.Remove("/.git/config")
+	idx.Remove("/cat")
+	idx.Remove("/._cat.png")
+	if at := idx.Status().At; at != 0 {
+		t.Fatalf("never crawled, yet indexed at %d", at)
+	}
 	idx.Put(domain.Entry{Name: "Tài liệu Đà Nẵng.docx", Path: "/Tài liệu Đà Nẵng.docx"})
-	if got := idx.Search("tai lieu da nang"); len(got) != 1 {
+	if got := idx.Search("tai lieu da nang", "", 0, false).Entries; len(got) != 1 {
 		t.Fatalf("accent-insensitive search: %+v", got)
 	}
 	idx.Remove("/Tài liệu Đà Nẵng.docx")
 	idx.Move("/Photos", "/Pics", false)
 	idx.Remove("/notes.txt")
-	if got := idx.Search("cat"); len(got) != 1 || got[0].Path != "/Pics/cat.png" || len(idx.entries) != 2 {
+	if got := idx.Search("cat", "", 0, false).Entries; len(got) != 1 || got[0].Path != "/Pics/cat.png" || len(idx.entries) != 2 {
 		t.Fatalf("after move/remove: %+v", idx.entries)
+	}
+}
+
+func TestQuotaFallsBackToIndex(t *testing.T) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMultiStatus)
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/</D:href><D:propstat><D:prop><D:quota-used-bytes>0</D:quota-used-bytes><D:quota-available-bytes>100</D:quota-available-bytes></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`))
+	}))
+	srv.Start()
+	s := session(t, srv.URL)
+	idx := NewIndex(s, noEvents{})
+	idx.entries = map[string]item{}
+	idx.Put(domain.Entry{Name: "a", Path: "/a", Size: 7}, domain.Entry{Name: "d", Path: "/d", Dir: true})
+	if q, err := (&Files{S: s, Index: idx}).Quota(); err != nil || q.Used != 7 || q.Available != 100 {
+		t.Fatalf("quota: %+v %v", q, err)
 	}
 }
 
@@ -134,6 +172,36 @@ func TestCancelWhileQueued(t *testing.T) {
 		}
 		if n := tr.Running(); n != 3 {
 			t.Fatalf("a cancelled queued transfer still counts: %d running", n)
+		}
+	})
+}
+
+type sent chan any
+
+func (s sent) Emit(_ string, data any) { s <- data }
+
+func TestEmitBatches(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ev := make(sent, 10)
+		tr := NewTransfers(&Session{}, NewIndex(&Session{}, noEvents{}), ev)
+		names := []string{"a", "b", "c", "d", "e"}
+		for _, n := range names {
+			tr.enqueue(domain.Transfer{Name: n}, func(context.Context, func(int64)) error { return nil })
+		}
+		time.Sleep(time.Second)
+		if len(ev) != 1 {
+			t.Fatalf("queued, running and done of 5 transfers should be one event, got %d", len(ev))
+		}
+		batch, _ := (<-ev).([]domain.Transfer)
+		var got []string
+		for _, x := range batch {
+			if x.Status != "done" {
+				t.Fatalf("batch holds a stale state: %+v", x)
+			}
+			got = append(got, x.Name)
+		}
+		if !slices.Equal(got, names) {
+			t.Fatalf("batch order: %v", got)
 		}
 	})
 }
@@ -246,6 +314,22 @@ func TestDragWriteFolder(t *testing.T) {
 	}
 }
 
+func TestDownloadMakesMissingFolder(t *testing.T) {
+	srv := httptest.NewTestServer(t, webdavtest.New(map[string]bool{"/": true}, map[string]string{"/a": "x"}))
+	srv.Start()
+	dest := filepath.Join(t.TempDir(), "gone", "Downloads")
+	tr := transfers(session(t, srv.URL))
+	if _, err := tr.Download("/a", 1, dest); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-tr.ts[0].done; err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dest, "a")); string(b) != "x" {
+		t.Fatalf("got %q", b)
+	}
+}
+
 func TestLocalName(t *testing.T) {
 	for _, bad := range []string{"..", "../evil", "/etc/passwd", ""} {
 		if _, err := localName(bad); err == nil {
@@ -302,10 +386,10 @@ func TestThumbFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	fh, _ := os.Open(file)
-	img, err := jpeg.Decode(fh)
+	img, format, err := image.Decode(fh)
 	fh.Close()
-	if err != nil || img.Bounds().Dx() != 360 || img.Bounds().Dy() != 120 {
-		t.Fatalf("thumb: err=%v bounds=%v", err, img.Bounds())
+	if err != nil || format != "png" || img.Bounds().Dx() != 360 || img.Bounds().Dy() != 120 {
+		t.Fatalf("translucent source keeps alpha as a PNG: err=%v format=%s", err, format)
 	}
 	if n, _ := os.ReadDir(th.Dir); len(n) != 1 {
 		t.Fatalf("expected one cached file, got %d", len(n))

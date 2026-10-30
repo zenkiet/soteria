@@ -15,7 +15,7 @@ import (
 
 var ErrUnsupported = errors.New("unsupported image")
 
-// Thumbs caches 360px JPEGs of remote images on disk.
+// Thumbs caches 360px thumbnails of remote images on disk.
 type Thumbs struct {
 	S   *Session
 	Dir string
@@ -27,7 +27,8 @@ var slots = make(chan struct{}, 4)
 // File returns the cached thumbnail for p, keyed by v (its modified time); undecodable formats return ErrUnsupported.
 func (t *Thumbs) File(ctx context.Context, p, v string) (string, error) {
 	sum := sha256.Sum256([]byte(p + "\x00" + v))
-	file := filepath.Join(t.Dir, hex.EncodeToString(sum[:])+".jpg")
+	// No extension: thumbnails are JPEG or PNG, and ServeFile sniffs which.
+	file := filepath.Join(t.Dir, hex.EncodeToString(sum[:]))
 	if _, err := os.Stat(file); err == nil {
 		return file, nil
 	}
@@ -50,12 +51,12 @@ func (t *Thumbs) File(ctx context.Context, p, v string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	jpg, err := thumb.JPEG(data, 360)
+	img, err := thumb.Make(data, 360)
 	if err != nil {
 		return "", ErrUnsupported
 	}
 	_ = os.MkdirAll(t.Dir, 0o700)
-	if err := store.WriteFile(file, jpg); err != nil {
+	if err := store.WriteFile(file, img); err != nil {
 		return "", err
 	}
 	return file, nil

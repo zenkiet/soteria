@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Connect, Servers, type Server } from '#/shared/api/index.ts';
-	import { mac, msg, windows } from '#/shared/lib/index.ts';
+	import { home, mac, msg, windows } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
 	let s = $state<Server>({
@@ -30,8 +30,7 @@
 		busy = true;
 		error = '';
 		try {
-			await Connect(s, password);
-			await goto('/files');
+			await goto(home((await Connect(s, password))!));
 		} catch (err) {
 			error = msg(err);
 		}
@@ -40,7 +39,7 @@
 </script>
 
 <div class="flex h-screen flex-col">
-	<div class="h-13 shrink-0" style="--wails-draggable: drag"></div>
+	<div class="titlebar h-13 shrink-0"></div>
 	<div class="flex flex-1 items-center justify-center pb-13">
 		<form class="flex w-100 flex-col gap-6" onsubmit={submit}>
 			<a href="/" class="inline-flex items-center gap-1 text-xs text-fg-2 hover:text-fg">

@@ -5,6 +5,7 @@ import "testing"
 func TestLinkRoute(t *testing.T) {
 	cases := map[string]string{
 		"soteria://files/POS/Trung%20TR/DLL": "/files/POS/Trung%20TR/DLL",
+		"soteria://files?focus=%2Fa.txt":     "/files?focus=%2Fa.txt",
 		"soteria://settings":                 "",
 		"http://192.168.1.194:8000/dav/POS":  "",
 		"-psn_0_12345":                       "",

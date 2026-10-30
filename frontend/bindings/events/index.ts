@@ -29,7 +29,7 @@ export const Index = "index";
 export const Nav = "nav";
 
 /**
- * Name of the custom event "transfer".
+ * Name of the custom event "transfers".
  */
-export const Transfer = "transfer";
+export const Transfers = "transfers";
 

@@ -6,9 +6,13 @@ type Prefs = {
 	asc: boolean;
 	hidden: boolean;
 	lastDir: Record<string, string>;
+	starred: Record<string, { path: string; dir: boolean }[]>;
 	downloadDir: string;
 	askDownloadDir: boolean;
 	sidebarHidden: boolean;
+	sidebarWidth: number;
+	infoHidden: boolean;
+	infoWidth: number;
 	drive: Record<string, boolean>;
 	intro: Record<string, boolean>;
 	background: boolean;
@@ -24,9 +28,13 @@ const DEFAULTS: Prefs = {
 	asc: true,
 	hidden: false,
 	lastDir: {},
+	starred: {},
 	downloadDir: '',
 	askDownloadDir: false,
 	sidebarHidden: false,
+	sidebarWidth: 240,
+	infoHidden: true,
+	infoWidth: 280,
 	drive: {},
 	intro: {},
 	background: true,

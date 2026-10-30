@@ -19,7 +19,7 @@ declare module "@wailsio/runtime" {
             "dropped": wails$0.Drop;
             "index": domain$0.IndexStatus;
             "nav": string;
-            "transfer": domain$0.Transfer;
+            "transfers": domain$0.Transfer[] | null;
         }
     }
 }

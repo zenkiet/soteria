@@ -1,6 +1,12 @@
+<script lang="ts" module>
+	import { SvelteSet } from 'svelte/reactivity';
+
+	// Kept for the session: the panel unmounts on the Transfers page and must not bring dismissed rows back.
+	const hidden = new SvelteSet<string>();
+</script>
+
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		Cancel,
 		CancelGroup,
@@ -9,21 +15,11 @@
 		transfers,
 		type Transfer
 	} from '#/shared/api/index.ts';
-	import {
-		base,
-		bytes,
-		filesHref,
-		focusHref,
-		iconFor,
-		parent,
-		plural,
-		sum
-	} from '#/shared/lib/index.ts';
-	import { Dialog, Icon } from '#/shared/ui/index.ts';
+	import { base, bytes, filesHref, focusHref, parent, plural, sum } from '#/shared/lib/index.ts';
+	import { Dialog, FileIcon, Icon } from '#/shared/ui/index.ts';
 
 	type Row = { key: string; name: string; dir: string; group: boolean; ts: Transfer[] };
 
-	const hidden = new SvelteSet<string>();
 	let collapsed = $state(false);
 	let confirm = $state(false);
 	let start = { at: 0, done: 0 };
@@ -65,6 +61,13 @@
 	});
 
 	const dismiss = () => items.forEach((t) => hidden.add(t.id));
+	// A finished, error-free batch gets out of the way, like Dropbox's uploader.
+	const idle = $derived(items.length > 0 && !pending && !failed);
+	$effect(() => {
+		if (!idle) return;
+		const t = setTimeout(dismiss, 5000);
+		return () => clearTimeout(t);
+	});
 	const cancelAll = () => {
 		items.filter(live).forEach((t) => Cancel(t.id));
 		dismiss();
@@ -125,11 +128,7 @@
 					<div
 						class="group flex items-center gap-2.5 border-t border-line py-2 pr-2.5 pl-3.5 hover:bg-surface-2"
 					>
-						<Icon
-							name={r.group ? 'folderFill' : iconFor({ name: r.name, dir: false })}
-							size={16}
-							class={r.group ? '' : 'text-fg-2'}
-						/>
+						<FileIcon name={r.name} dir={r.group} size={16} />
 						<div class="flex min-w-0 flex-1 flex-col gap-1">
 							<div class="flex items-baseline justify-between gap-2.5">
 								<span class="truncate">{r.name}</span>

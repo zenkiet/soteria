@@ -68,6 +68,12 @@ type Usage struct {
 	Bytes int64 `json:"bytes"`
 }
 
+// Found is the best matches of a search and how many matched in all.
+type Found struct {
+	Entries []Entry `json:"entries"`
+	Total   int     `json:"total"`
+}
+
 type IndexStatus struct {
 	Count   int   `json:"count"`
 	Folders int   `json:"folders"`

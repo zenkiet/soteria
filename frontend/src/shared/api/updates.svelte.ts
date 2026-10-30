@@ -12,7 +12,11 @@ export const update = $state({
 	open: false
 });
 
-const sync = () => UpdateStatus().then((s) => (update.s = s));
+// Object assignments get block bodies: returning the proxied value trips Svelte's assignment_value_stale.
+const sync = () =>
+	UpdateStatus().then((s) => {
+		update.s = s;
+	});
 sync();
 
 for (const n of [
@@ -24,7 +28,9 @@ for (const n of [
 // Checks run in the backend; these keep the dialog and "checked X ago" honest.
 for (const n of [Updater.Events.UpdateAvailable, Updater.Events.NoUpdate])
 	Events.On(n, () => sync().then(() => (update.checkedAt = Date.now())));
-Events.On(Updater.Events.DownloadProgress, (e) => (update.progress = e.data));
+Events.On(Updater.Events.DownloadProgress, (e) => {
+	update.progress = e.data;
+});
 Events.On(Updater.Events.UpdateReady, () => {
 	update.progress = null;
 	sync().then(() => (update.open = true));

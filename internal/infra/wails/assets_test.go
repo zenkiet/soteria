@@ -51,3 +51,19 @@ func TestPreviewProxy(t *testing.T) {
 		t.Fatalf("range: %d %q %d", rec.Code, rec.Header().Get("Content-Range"), rec.Body.Len())
 	}
 }
+
+func TestClampRange(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                 "",
+		"bytes=0-":         "bytes=0-8388607",
+		"bytes=100-":       "bytes=100-8388707",
+		"bytes=0-3":        "bytes=0-3",
+		"bytes=0-99999999": "bytes=0-8388607",
+		"bytes=-500":       "bytes=-500",
+		"bytes=0-1,5-9":    "bytes=0-1,5-9",
+	} {
+		if got := clampRange(in); got != want {
+			t.Errorf("clampRange(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

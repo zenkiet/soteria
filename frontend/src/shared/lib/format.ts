@@ -10,10 +10,24 @@ export function bytes(n: number) {
 }
 
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-export const when = (iso: string) => (iso.startsWith('0001') ? '—' : date.format(new Date(iso)));
+const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
+// Finder's wording: "Today at 9:41 AM", "Yesterday at …", then the full date.
+export const when = (iso: string) => {
+	if (iso.startsWith('0001')) return '—';
+	const d = new Date(iso);
+	const days = Math.round(
+		(new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 864e5
+	);
+	return days === 0
+		? `Today at ${time.format(d)}`
+		: days === 1
+			? `Yesterday at ${time.format(d)}`
+			: date.format(d);
+};
 
 import { OFFLINE, lost } from './net.svelte';
 import { mac } from './platform';
+import { prefs } from './prefs.svelte';
 
 export const msg = (e: unknown) => {
 	const m = e instanceof Error ? e.message : String(e);
@@ -32,24 +46,14 @@ export const validName = (name: string, taken: string[]) => {
 	return '';
 };
 
-const ext = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+export const ext = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 
 const table = <K extends string>(o: Record<K, string>) =>
 	Object.fromEntries(
 		Object.entries<string>(o).flatMap(([k, v]) => v.split(' ').map((x) => [x, k]))
 	) as Record<string, K>;
 
-const icons = table({
-	image: 'jpg jpeg png gif webp heic svg',
-	video: 'mp4 mov mkv webm',
-	archive: 'zip gz tar rar 7z',
-	sheet: 'xlsx xls csv numbers',
-	doc: 'pdf md txt doc docx'
-});
-
 type Named = { name: string; dir: boolean; contentType?: string };
-
-export const iconFor = (e: Named) => (e.dir ? 'folderFill' : (icons[ext(e.name)] ?? 'file'));
 
 export const kind = (e: Named) =>
 	e.dir ? 'Folder' : e.name.includes('.') ? ext(e.name).toUpperCase() : e.contentType || 'File';
@@ -57,9 +61,15 @@ export const kind = (e: Named) =>
 export const parent = (p: string) => p.slice(0, p.lastIndexOf('/')) || '/';
 export const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 export const join = (dir: string, name: string) => (dir === '/' ? '' : dir) + '/' + name;
-export const filesHref = (p: string) => '/files' + p.split('/').map(encodeURIComponent).join('/');
+export const filesHref = (p: string) =>
+	'/files' + (p === '/' ? '' : p.split('/').map(encodeURIComponent).join('/'));
 export const focusHref = (p: string) => filesHref(parent(p)) + '?focus=' + encodeURIComponent(p);
+export const home = (s: { id: string }) => filesHref(prefs.lastDir[s.id] || '/');
+// Finder and Dropbox keep these out of sight: dotfiles, Office lock files and Windows thumbnail caches.
+export const listed = (e: { name: string }) =>
+	prefs.hidden || !/^(\.|~\$)|^(thumbs\.db|desktop\.ini)$/i.test(e.name);
 export const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+export const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 export const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0);
 
 const previews = table({
@@ -68,12 +78,13 @@ const previews = table({
 	pdf: 'pdf',
 	video: 'mp4 mov m4v webm',
 	audio: 'mp3 m4a wav aac flac',
-	text: 'txt md json log csv xml yaml yml toml ini conf js ts go py css html sh sql',
+	text: 'txt json log xml yaml yml toml ini conf js ts go py css html sh sql',
+	md: 'md',
+	csv: 'csv',
 	docx: 'docx'
 });
 
 export const previewKind = (name: string) => previews[ext(name)] ?? null;
-export const previewUrl = (path: string) => '/preview?path=' + encodeURIComponent(path);
 export const thumbUrl = (path: string, v: string) =>
 	'/thumb?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(v);
 

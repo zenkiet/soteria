@@ -2,10 +2,11 @@ package wails
 
 import "strings"
 
-// soteria://files/<path> opens /files/<path>; the path stays percent-encoded and the router decodes it.
+// soteria://files/<path> opens /files/<path>, and soteria://files?focus=… a file in the root; the path stays
+// percent-encoded and the router decodes it.
 func linkRoute(u string) string {
 	route, ok := strings.CutPrefix(u, "soteria:/")
-	if !ok || !strings.HasPrefix(route, "/files/") {
+	if !ok || !strings.HasPrefix(route, "/files/") && !strings.HasPrefix(route, "/files?") {
 		return ""
 	}
 	return route

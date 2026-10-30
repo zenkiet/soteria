@@ -70,8 +70,7 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 		// Launch at login passes this on Windows, where the tray can stand in for the window.
 		Hidden: slices.Contains(os.Args[1:], "--hidden"),
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 52,
-			TitleBar:                application.MacTitleBarHiddenInset,
+			TitleBar: application.MacTitleBarHiddenInset,
 			WebviewPreferences: application.MacWebviewPreferences{
 				AllowsBackForwardNavigationGestures: application.Enabled,
 			},
@@ -87,6 +86,24 @@ func Run(a *App, assets fs.FS, logger *slog.Logger) error {
 	a.state = store.LoadWindow()
 	if a.state.W > 0 {
 		opts.Width, opts.Height = a.state.W, a.state.H
+	}
+	if c := a.state.Background; c != [3]uint8{} {
+		opts.BackgroundColour = application.NewRGB(c[0], c[1], c[2])
+	}
+	// The default menu's Reload wipes the page's state, and Help → Learn More navigates this window to wails.io.
+	if runtime.GOOS == "darwin" {
+		menu := application.NewMenu()
+		menu.AddRole(application.AppMenu)
+		menu.AddRole(application.FileMenu)
+		menu.AddRole(application.EditMenu)
+		view := menu.AddSubmenu("View")
+		view.AddRole(application.ResetZoom)
+		view.AddRole(application.ZoomIn)
+		view.AddRole(application.ZoomOut)
+		view.AddSeparator()
+		view.AddRole(application.ToggleFullscreen)
+		menu.AddRole(application.WindowMenu)
+		wapp.Menu.Set(menu)
 	}
 	win := wapp.Window.NewWithOptions(opts)
 	a.win, a.hidden = win, opts.Hidden
@@ -145,8 +162,11 @@ func (a *App) fit() {
 func (a *App) trackWindow(w *application.WebviewWindow) {
 	save := time.AfterFunc(math.MaxInt64, func() {
 		if !w.IsMaximised() {
-			a.state.W, a.state.H = w.Size()
+			width, height := w.Size()
+			a.stateMu.Lock()
+			a.state.W, a.state.H = width, height
 			store.SaveWindow(a.state)
+			a.stateMu.Unlock()
 		}
 	})
 	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) { save.Reset(300 * time.Millisecond) })

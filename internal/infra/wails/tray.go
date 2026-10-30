@@ -237,11 +237,16 @@ func (a *App) post(n notifications.NotificationOptions, actions ...notifications
 
 // hint says once that closing the window didn't quit.
 func (a *App) hint() {
-	if a.state.Hinted {
+	a.stateMu.Lock()
+	hinted := a.state.Hinted
+	a.state.Hinted = true
+	if !hinted {
+		store.SaveWindow(a.state)
+	}
+	a.stateMu.Unlock()
+	if hinted {
 		return
 	}
-	a.state.Hinted = true
-	store.SaveWindow(a.state)
 	bar := "menu bar"
 	if runtime.GOOS == "windows" {
 		bar = "system tray"

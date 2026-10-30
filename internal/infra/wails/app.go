@@ -3,7 +3,6 @@ package wails
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"time"
 
@@ -35,6 +34,8 @@ type App struct {
 	Notes   *notifications.NotificationService
 	win     *application.WebviewWindow
 	state   store.WindowState
+	// stateMu is never held across a Wails call, which may wait on the main thread.
+	stateMu sync.Mutex
 	mu      sync.Mutex
 	tray    *application.SystemTray
 	rt      *time.Timer
@@ -62,7 +63,7 @@ func (Events) Emit(name string, data any) {
 }
 
 func init() {
-	application.RegisterEvent[domain.Transfer]("transfer")
+	application.RegisterEvent[[]domain.Transfer]("transfers")
 	application.RegisterEvent[Drop]("dropped")
 	application.RegisterEvent[bool]("dragend")
 	application.RegisterEvent[domain.IndexStatus]("index")
@@ -83,9 +84,8 @@ func (a *App) Quota() (domain.Quota, error)                               { retu
 func (a *App) Mkdir(p string) error                                       { return a.F.Mkdir(p) }
 func (a *App) Move(from, to string) error                                 { return a.F.Move(from, to) }
 
-func (a *App) Copy(from, to string) error    { return a.F.Copy(from, to) }
-func (a *App) Ping() error                   { return a.F.Ping() }
-func (a *App) Link(p string) (string, error) { return a.F.Link(p) }
+func (a *App) Copy(from, to string) error { return a.F.Copy(from, to) }
+func (a *App) Ping() error                { return a.F.Ping() }
 
 func (a *App) Transfers() []domain.Transfer { return a.T.List() }
 func (a *App) Cancel(id string)             { a.T.Cancel(id) }
@@ -104,9 +104,8 @@ func (a *App) Download(remote string, size int64, dest string) (string, error) {
 func (a *App) DownloadDir(remote, dest string) error { return a.T.DownloadDir(remote, dest) }
 func (a *App) Reveal(local string) error             { return shell.Reveal(local) }
 
-func (a *App) PickUploads(dir string) ([]domain.Conflict, error) {
-	// Windows' picker can't mix files and folders, so it offers files; folders still upload by drag and drop.
-	files, err := application.Get().Dialog.OpenFile().SetTitle("Upload to " + dir).CanChooseDirectories(runtime.GOOS != "windows").PromptForMultipleSelection()
+func (a *App) PickUploads(dir string, folders bool) ([]domain.Conflict, error) {
+	files, err := application.Get().Dialog.OpenFile().SetTitle("Upload to " + dir).CanChooseFiles(!folders).CanChooseDirectories(folders).PromptForMultipleSelection()
 	if err = cancelled(err); err != nil || len(files) == 0 {
 		return nil, err
 	}
@@ -136,8 +135,8 @@ func (a *App) Reindex()                                        { a.I.Reindex() }
 func (a *App) Indexed() domain.IndexStatus                     { return a.I.Status() }
 func (a *App) Recent(n int) []domain.Entry                     { return a.I.Recent(n) }
 func (a *App) FolderUsages(dir string) map[string]domain.Usage { return a.I.Usages(dir) }
-func (a *App) Search(q string) []domain.Entry {
-	return a.I.Search(q)
+func (a *App) Search(q, kind string, since int64, hidden bool) domain.Found {
+	return a.I.Search(q, kind, since, hidden)
 }
 
 func (a *App) Drive() domain.Drive          { return a.M.Drive() }
@@ -147,6 +146,21 @@ func (a *App) InstallDriver() error         { return a.M.InstallDriver() }
 func (a *App) Open(p string) error          { return shell.Open(p) }
 
 func (a *App) LogPath() string { return store.LogPath() }
+
+// SetBackdrop paints the native window behind the page and keeps the colour for the next launch's first frame.
+func (a *App) SetBackdrop(r, g, b uint8) {
+	c := [3]uint8{r, g, b}
+	a.stateMu.Lock()
+	changed := a.state.Background != c
+	if changed {
+		a.state.Background = c
+		store.SaveWindow(a.state)
+	}
+	a.stateMu.Unlock()
+	if changed {
+		a.win.SetBackgroundColour(application.NewRGB(r, g, b))
+	}
+}
 
 // DragOut starts a native drag: macOS downloads each item where it is dropped, Windows hands Explorer the drive paths.
 func (a *App) DragOut(entries []domain.Entry) error {

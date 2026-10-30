@@ -7,7 +7,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ConnectSaved, DeepLink, Forget, Servers, type Server } from '#/shared/api/index.ts';
-	import { mac, msg, prefs, toast, windows } from '#/shared/lib/index.ts';
+	import { home, mac, msg, prefs, toast, windows } from '#/shared/lib/index.ts';
 	import { Icon } from '#/shared/ui/index.ts';
 
 	let servers = $state<Server[]>([]);
@@ -25,7 +25,7 @@
 		busy = s.id;
 		try {
 			await ConnectSaved(s.id);
-			if (!auto || page.route.id === '/') await goto((await DeepLink()) || '/files');
+			if (!auto || page.route.id === '/') await goto((await DeepLink()) || home(s));
 		} catch (e) {
 			if (!msg(e).includes('password required')) toast(msg(e), 'error');
 			else if (!auto) await goto(`/sign-in?id=${s.id}`);
@@ -40,7 +40,7 @@
 </script>
 
 <div class="flex h-screen flex-col">
-	<div class="h-13 shrink-0" style="--wails-draggable: drag"></div>
+	<div class="titlebar h-13 shrink-0"></div>
 	<div class="flex flex-1 items-center justify-center pb-13">
 		<div class="flex w-130 flex-col gap-5">
 			<div>

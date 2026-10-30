@@ -4,6 +4,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import wails from '@wailsio/runtime/plugins/vite';
+import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
 
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
@@ -28,6 +29,7 @@ export default defineConfig({
 			// Kit 3 polls version.json hourly by default; the desktop app updates via the backend.
 			version: { pollInterval: 0 }
 		}),
+		icons({ compiler: 'svelte' }),
 		wails('./bindings')
 	]
 });

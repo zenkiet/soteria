@@ -1,4 +1,4 @@
-// Package thumb makes small JPEGs: ImageIO on macOS (HEIC, RAW, EXIF rotation, subsampled decode), Go decoders elsewhere.
+// Package thumb makes small thumbnails, JPEG or PNG when the image has alpha: ImageIO on macOS (HEIC, RAW, EXIF rotation, subsampled decode), Go decoders elsewhere.
 package thumb
 
 /*
@@ -20,7 +20,9 @@ static CFDataRef thumbnail(const void *data, long n, int px) {
 	CFRelease(src);
 	if (!img) return NULL;
 	CFMutableDataRef out = CFDataCreateMutable(NULL, 0);
-	CGImageDestinationRef dst = CGImageDestinationCreateWithData(out, CFSTR("public.jpeg"), 1, NULL);
+	CGImageAlphaInfo a = CGImageGetAlphaInfo(img);
+	bool alpha = a != kCGImageAlphaNone && a != kCGImageAlphaNoneSkipFirst && a != kCGImageAlphaNoneSkipLast;
+	CGImageDestinationRef dst = CGImageDestinationCreateWithData(out, alpha ? CFSTR("public.png") : CFSTR("public.jpeg"), 1, NULL);
 	CGImageDestinationAddImage(dst, img, NULL);
 	bool ok = CGImageDestinationFinalize(dst);
 	CFRelease(dst);
@@ -41,8 +43,8 @@ import (
 
 var errDecode = errors.New("not an image ImageIO can read")
 
-// JPEG returns data as a JPEG at most px pixels on its longer side.
-func JPEG(data []byte, px int) ([]byte, error) {
+// Make returns data as an image at most px pixels on its longer side.
+func Make(data []byte, px int) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, errDecode
 	}

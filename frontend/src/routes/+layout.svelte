@@ -1,13 +1,15 @@
 <script lang="ts">
 	import '#/app/app.css';
 	import { goto } from '$app/navigation';
-	import { Events, Window } from '@wailsio/runtime';
+	import { Events } from '@wailsio/runtime';
 	import { on } from 'svelte/events';
 	import { Toasts, UpdateDialog } from '#/app/ui/index.ts';
-	import { SetAutoUpdate, SetBackground } from '#/shared/api/index.ts';
+	import { SetAutoUpdate, SetBackdrop, SetBackground } from '#/shared/api/index.ts';
 	import { desktop, mac, prefs, theme } from '#/shared/lib/index.ts';
 
 	let { children } = $props();
+	// Only macOS hides the title bar; on Windows the header must not move the window.
+	document.documentElement.classList.toggle('mac', mac);
 	$effect(() => {
 		if (desktop) SetBackground(prefs.background, prefs.notify);
 	});
@@ -20,7 +22,7 @@
 	// The native window shows through while WebView2 catches up with a resize.
 	function paint() {
 		const [r, g, b] = getComputedStyle(document.body).backgroundColor.match(/\d+/g)!.map(Number);
-		Window.SetBackgroundColour(r, g, b, 255);
+		SetBackdrop(r, g, b);
 	}
 	$effect(() => {
 		void theme.value;

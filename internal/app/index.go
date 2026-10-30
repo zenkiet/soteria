@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/gob"
 	"maps"
@@ -198,7 +199,12 @@ func (i *Index) Clear() {
 func (i *Index) emit(s domain.IndexStatus) { i.ev.Emit("index", s) }
 
 func (i *Index) status() domain.IndexStatus {
-	return domain.IndexStatus{Count: len(i.entries), Done: !i.indexing, At: i.at.Unix()}
+	s := domain.IndexStatus{Count: len(i.entries), Done: !i.indexing}
+	// Before the first crawl the zero time would read as "indexed 17,000,000 h ago".
+	if !i.at.IsZero() {
+		s.At = i.at.Unix()
+	}
+	return s
 }
 
 func (i *Index) Status() domain.IndexStatus {
@@ -211,7 +217,7 @@ func (i *Index) Recent(n int) []domain.Entry {
 	i.mu.Lock()
 	files := []domain.Entry{}
 	for _, it := range i.entries {
-		if !it.Dir {
+		if !it.Dir && !junk(it.Path) {
 			files = append(files, it.Entry)
 		}
 	}
@@ -247,21 +253,79 @@ func (i *Index) Usages(dir string) map[string]domain.Usage {
 	return out
 }
 
-func (i *Index) Search(q string) []domain.Entry {
+// Search matches names and, when set, the kind ("images", "folders"…) and a modified-since Unix time; filters alone are a query.
+// It returns the 500 best: exact names, then names that start with q, then the most recently modified.
+func (i *Index) Search(q, kind string, since int64, hidden bool) domain.Found {
 	q = fold(strings.TrimSpace(q))
-	out := []domain.Entry{}
-	if q == "" {
-		return out
+	if q == "" && kind == "" && since == 0 {
+		return domain.Found{Entries: []domain.Entry{}}
 	}
+	type hit struct {
+		domain.Entry
+		rank int
+	}
+	var hits []hit
+	i.mu.Lock()
+	for _, it := range i.entries {
+		if strings.Contains(it.key, q) && (kind == "" || kindOf(it.Entry) == kind) && (since == 0 || it.Modified.Unix() >= since) && (hidden || !junk(it.Path)) {
+			rank := 2
+			if it.key == q {
+				rank = 0
+			} else if strings.HasPrefix(it.key, q) {
+				rank = 1
+			}
+			hits = append(hits, hit{it.Entry, rank})
+		}
+	}
+	i.mu.Unlock()
+	slices.SortFunc(hits, func(a, b hit) int { return cmp.Or(cmp.Compare(a.rank, b.rank), b.Modified.Compare(a.Modified)) })
+	out := make([]domain.Entry, min(len(hits), 500))
+	for n := range out {
+		out[n] = hits[n].Entry
+	}
+	return domain.Found{Entries: out, Total: len(hits)}
+}
+
+// Finder and Dropbox keep these out of sight: whatever is in a dot folder, dotfiles, Office lock files and Windows
+// thumbnail caches.
+func junk(p string) bool {
+	name := path.Base(p)
+	return strings.Contains(p, "/.") || strings.HasPrefix(name, "~$") || strings.EqualFold(name, "Thumbs.db") || strings.EqualFold(name, "desktop.ini")
+}
+
+var kinds = func() map[string]string {
+	m := map[string]string{}
+	for kind, exts := range map[string]string{
+		"images":        "jpg jpeg png gif webp heic heif bmp tif tiff svg avif",
+		"documents":     "pdf doc docx rtf txt md odt pages epub",
+		"spreadsheets":  "xls xlsx csv ods numbers",
+		"presentations": "ppt pptx key odp",
+		"videos":        "mp4 mov m4v mkv webm avi",
+		"audio":         "mp3 m4a wav aac flac ogg",
+		"archives":      "zip gz tgz tar rar 7z",
+	} {
+		for _, e := range strings.Fields(exts) {
+			m[e] = kind
+		}
+	}
+	return m
+}()
+
+func kindOf(e domain.Entry) string {
+	if e.Dir {
+		return "folders"
+	}
+	return kinds[strings.ToLower(strings.TrimPrefix(path.Ext(e.Name), "."))]
+}
+
+// Bytes sums the sizes of every indexed file.
+func (i *Index) Bytes() (n int64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	for _, it := range i.entries {
-		if strings.Contains(it.key, q) {
-			out = append(out, it.Entry)
-			if len(out) == 500 {
-				break
-			}
+		if !it.Dir {
+			n += it.Size
 		}
 	}
-	return out
+	return n
 }

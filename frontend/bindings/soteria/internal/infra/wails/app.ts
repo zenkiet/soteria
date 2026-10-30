@@ -102,10 +102,6 @@ export function LaunchAtLogin(): $CancellablePromise<boolean> {
     return $Call.ByID(3480213936);
 }
 
-export function Link(p: string): $CancellablePromise<string> {
-    return $Call.ByID(324235465, p);
-}
-
 export function List(p: string): $CancellablePromise<domain$0.Entry[] | null> {
     return $Call.ByID(309576417, p);
 }
@@ -138,8 +134,8 @@ export function PickFolder(): $CancellablePromise<string> {
     return $Call.ByID(3351796252);
 }
 
-export function PickUploads(dir: string): $CancellablePromise<domain$0.Conflict[] | null> {
-    return $Call.ByID(2372486830, dir);
+export function PickUploads(dir: string, folders: boolean): $CancellablePromise<domain$0.Conflict[] | null> {
+    return $Call.ByID(2372486830, dir, folders);
 }
 
 export function Ping(): $CancellablePromise<void> {
@@ -178,8 +174,8 @@ export function Reveal(local: string): $CancellablePromise<void> {
     return $Call.ByID(3917975088, local);
 }
 
-export function Search(q: string): $CancellablePromise<domain$0.Entry[] | null> {
-    return $Call.ByID(267664905, q);
+export function Search(q: string, kind: string, since: number, hidden: boolean): $CancellablePromise<domain$0.Found> {
+    return $Call.ByID(267664905, q, kind, since, hidden);
 }
 
 export function Servers(): $CancellablePromise<domain$0.Server[] | null> {
@@ -188,6 +184,13 @@ export function Servers(): $CancellablePromise<domain$0.Server[] | null> {
 
 export function SetAutoUpdate(on: boolean): $CancellablePromise<void> {
     return $Call.ByID(3485758073, on);
+}
+
+/**
+ * SetBackdrop paints the native window behind the page and keeps the colour for the next launch's first frame.
+ */
+export function SetBackdrop(r: number, g: number, b: number): $CancellablePromise<void> {
+    return $Call.ByID(3774557833, r, g, b);
 }
 
 /**

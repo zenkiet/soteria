@@ -10,15 +10,15 @@ import (
 	"image/color"
 	_ "image/gif"
 	"image/jpeg"
-	_ "image/png"
+	"image/png"
 
 	_ "golang.org/x/image/webp"
 )
 
 var errTooBig = errors.New("image too large to preview")
 
-// JPEG returns data as a JPEG at most px pixels on its longer side.
-func JPEG(data []byte, px int) ([]byte, error) {
+// Make returns data as an image at most px pixels on its longer side.
+func Make(data []byte, px int) ([]byte, error) {
 	// Decoders allocate the whole canvas from the header: a 1 MB PNG can claim gigabytes.
 	if c, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || c.Width*c.Height > 64<<20 {
 		return nil, cmp.Or(err, errTooBig)
@@ -28,7 +28,13 @@ func JPEG(data []byte, px int) ([]byte, error) {
 		return nil, err
 	}
 	var b bytes.Buffer
-	err = jpeg.Encode(&b, shrink(img, px), &jpeg.Options{Quality: 80})
+	small := shrink(img, px)
+	// JPEG has no alpha: transparent icons would turn into black blocks.
+	if o, ok := small.(interface{ Opaque() bool }); ok && !o.Opaque() {
+		err = png.Encode(&b, small)
+	} else {
+		err = jpeg.Encode(&b, small, &jpeg.Options{Quality: 80})
+	}
 	return b.Bytes(), err
 }
 
@@ -49,17 +55,17 @@ func shrink(img image.Image, px int) image.Image {
 		y0, y1 := b.Min.Y+int(float64(y)*fy), b.Min.Y+int(float64(y+1)*fy)
 		for x := range w {
 			x0, x1 := b.Min.X+int(float64(x)*fx), b.Min.X+int(float64(x+1)*fx)
-			var r, g, bl, n uint32
+			var r, g, bl, a, n uint32
 			for sy := y0; sy < y1; sy += step {
 				for sx := x0; sx < x1; sx += step {
-					cr, cg, cb, _ := img.At(sx, sy).RGBA()
-					r, g, bl, n = r+cr, g+cg, bl+cb, n+1
+					cr, cg, cb, ca := img.At(sx, sy).RGBA()
+					r, g, bl, a, n = r+cr, g+cg, bl+cb, a+ca, n+1
 				}
 			}
 			if n == 0 {
 				n = 1
 			}
-			out.Set(x, y, color.RGBA{uint8(r / n >> 8), uint8(g / n >> 8), uint8(bl / n >> 8), 255})
+			out.Set(x, y, color.RGBA{uint8(r / n >> 8), uint8(g / n >> 8), uint8(bl / n >> 8), uint8(a / n >> 8)})
 		}
 	}
 	return out

@@ -28,7 +28,12 @@ func (f *Files) Quota() (domain.Quota, error) {
 	if err != nil {
 		return domain.Quota{}, err
 	}
-	return c.Quota(context.Background())
+	q, err := c.Quota(context.Background())
+	// SFTPGo without quota tracking reports 0 or nothing; the index knows what the files add up to.
+	if err == nil && q.Used <= 0 {
+		q.Used = f.Index.Bytes()
+	}
+	return q, err
 }
 
 func (f *Files) Mkdir(p string) error {
@@ -74,14 +79,6 @@ func (f *Files) Ping() error {
 		return err
 	}
 	return c.Ping(context.Background())
-}
-
-func (f *Files) Link(p string) (string, error) {
-	c, err := f.S.Client()
-	if err != nil {
-		return "", err
-	}
-	return c.URL(p), nil
 }
 
 // Open streams a remote file for the preview endpoint, passing Range through for media.

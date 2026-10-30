@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Recent, Reindex, indexStatus, type Entry } from '#/shared/api/index.ts';
-	import { ago, bytes, focusHref, iconFor, parent, when } from '#/shared/lib/index.ts';
-	import { Icon } from '#/shared/ui/index.ts';
+	import { ago, bytes, focusHref, parent, when } from '#/shared/lib/index.ts';
+	import { FileIcon, Icon } from '#/shared/ui/index.ts';
+	import { Preview } from '#/widgets/preview/index.ts';
 
 	let items = $state.raw<Entry[]>([]);
+	let preview = $state<Entry | null>(null);
 	const idx = $derived(indexStatus.current);
 
 	const load = () => Recent(60).then((l) => (items = l ?? []));
@@ -30,7 +32,6 @@
 			.map((g) => [g, items.filter((e) => bucket(e) === g)] as const)
 			.filter(([, l]) => l.length)
 	);
-	const show = (e: Entry) => goto(focusHref(e.path));
 </script>
 
 <header class="page-header">
@@ -51,22 +52,40 @@
 			<h2 class="font-medium">{label} <span class="font-normal text-fg-3">{list.length}</span></h2>
 			<div>
 				{#each list as e (e.path)}
-					<button
-						class="grid h-13 w-full grid-cols-[minmax(0,1fr)_90px_170px] items-center gap-3 border-t border-line px-2 text-left hover:bg-surface-2"
-						onclick={() => show(e)}
-					>
-						<div class="flex min-w-0 items-center gap-2.5">
-							<Icon name={iconFor(e)} size={18} class="text-fg-2" />
-							<div class="flex min-w-0 flex-col">
-								<span class="truncate">{e.name}</span>
-								<span class="truncate font-mono text-[11px] text-fg-3">{parent(e.path)}</span>
+					<!-- The hover action sits beside the row's button, not inside it, so neither swallows the other. -->
+					<div class="group relative">
+						<button
+							class="grid h-13 w-full grid-cols-[minmax(0,1fr)_90px_170px] items-center gap-3 border-t border-line px-2 text-left group-hover:bg-surface-2"
+							onclick={() => (preview = e)}
+						>
+							<div class="flex min-w-0 items-center gap-2.5">
+								<FileIcon name={e.name} size={18} />
+								<div class="flex min-w-0 flex-col">
+									<span class="truncate" title={e.name}>{e.name}</span>
+									<span class="truncate font-mono text-[11px] text-fg-3">{parent(e.path)}</span>
+								</div>
 							</div>
-						</div>
-						<div class="text-right font-mono text-xs text-fg-2">{bytes(e.size)}</div>
-						<div class="text-xs text-fg-2">{when(e.modified)}</div>
-					</button>
+							<div class="text-right font-mono text-xs text-fg-2">{bytes(e.size)}</div>
+							<div class="text-xs text-fg-2">{when(e.modified)}</div>
+						</button>
+						<button
+							class="btn absolute top-1/2 right-2 h-7 -translate-y-1/2 text-xs opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+							onclick={() => goto(focusHref(e.path))}
+							><Icon name="open" size={14} />Show in folder</button
+						>
+					</div>
 				{/each}
 			</div>
 		</section>
 	{/each}
 </div>
+
+{#if preview}
+	<Preview
+		e={preview}
+		{items}
+		onchange={(e) => (preview = e)}
+		onclose={() => (preview = null)}
+		onshow={(e) => goto(focusHref(e.path))}
+	/>
+{/if}

@@ -5,6 +5,7 @@ export type {
     Conflict,
     Drive,
     Entry,
+    Found,
     IndexStatus,
     Quota,
     Server,

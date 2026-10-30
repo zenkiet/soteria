@@ -117,6 +117,8 @@ type WindowState struct {
 	W, H int
 	// Hinted records that the "still running" notification was shown.
 	Hinted bool
+	// Background is the page colour last painted, so a dark theme doesn't open on a light frame.
+	Background [3]uint8
 }
 
 func windowFile() string { return filepath.Join(Dir(), "window.json") }

@@ -9,6 +9,7 @@ export type {
 	TrashItem,
 	Usage
 } from '#bindings/soteria/internal/domain/models.ts';
+export { changes } from './changes.svelte';
 export { connectDrive } from './drive';
 export { indexStatus } from './index-status.svelte';
 export { live, transfers } from './transfers.svelte';

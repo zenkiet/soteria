@@ -23,10 +23,15 @@ func Start(window unsafe.Pointer, entries []domain.Entry, _ func() domain.Drive)
 	b, _ := json.Marshal(entries)
 	cs := C.CString(string(b))
 	defer C.free(unsafe.Pointer(cs))
-	if C.dragOut(window, cs) != 0 {
-		return errors.New("no drag gesture in progress")
+	switch C.dragOut(window, cs) {
+	case 0:
+		return nil
+	case 1:
+		// The button came up before the hand-off reached the main thread; nothing is left to drag.
+		goDragEnded()
+		return nil
 	}
-	return nil
+	return errors.New("couldn't find the webview to drag from")
 }
 
 //export goDragWrite
