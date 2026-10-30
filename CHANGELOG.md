@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.9.0](https://github.com/zenkiet/soteria/compare/598fed36e4e0fefdbbbc24317973f251eb3b4c5f..v0.9.0) - 2026-10-30
+#### 🚀 Features
+- (**ui**) ✨ Dropbox-style browsing, shared preview - ([598fed3](https://github.com/zenkiet/soteria/commit/598fed36e4e0fefdbbbc24317973f251eb3b4c5f)) - [@zenkiet](https://github.com/zenkiet)
+
+- - -
+
 ## [v0.8.0](https://github.com/zenkiet/soteria/compare/df164eb3ca69c37ab0bc6f9276d30ad61161b948..v0.8.0) - 2026-10-26
 #### 🚀 Features
 - (**windows**) ✨ harden the network drive, polish the Windows apo - ([df164eb](https://github.com/zenkiet/soteria/commit/df164eb3ca69c37ab0bc6f9276d30ad61161b948)) - [@zenkiet](https://github.com/zenkiet)
